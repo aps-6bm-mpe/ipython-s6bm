@@ -1,0 +1,1237 @@
+global parpfname
+
+global pca_time
+global pca_wcenter
+global pca_wwidth
+global pca_gsize
+global pca_pulserf
+global pca_pulserll
+global pca_pulserul
+global pca_xscale
+global pca_define_array
+global pca_peaktitle1
+global pca_peaktitle2
+global pca_peaktitle3
+global pca_ctoe_a0
+global pca_ctoe_a1
+global pca_ecala
+global pca_ecalb 
+global pca_ct
+
+def PEAK 'pl_xMAX'
+
+def goto_tth '{
+	local tth_value 
+
+        tth_value=$1
+	umv tth tth_value
+	umv ytth tan(tth_value/57.3)*725.
+
+}'
+
+def pca3_help '{
+	printf("\n PCA3 macro list:\n\n")
+	printf("       setpca3 - define pca3 parameter\n")
+	printf("          pca3 - start recording and displaying a mca spectrum\n")
+	printf("      savepca3 - save the last spectrum recorded by pca3\n")
+ 	printf("    energy_cal - calibrate energy scale using peaks defined in setpca3\n")
+	printf("\n For the usage of each macro, type the name of the macro and then\n")
+	printf(" press <Enter>.\n")
+}'
+
+def initialize_pca3 '{
+	local i
+
+ 	# whoever commented this out should have at least told me (Zhong),
+	# I have added it back in 4/15/05  
+	#float array spectrum[$1][2]
+	#ulong array data[$1][1] 
+
+	float array spectrum[$1][2]
+	ulong array data[$1][1] 
+	
+	for(i=0;i<$1;i++){spectrum[i][0]=i+1}
+	mca_par("group_size",$1)
+	mca_par("gain",$1)
+	mca_par("offset",0) 
+	mca_par("pha")
+#	mca_par("disable",0)
+# disable auto_run, so that ct will work 
+	mca_par("auto_run", 0)
+	mca_par("select_group",0)
+	printf("PCA3 initialized")
+}'
+
+def pca3_help '{
+	printf("\n PCA3 macro list:\n\n")
+	printf("       setpca3 - define pca3 parameter\n")
+	printf("          pca3 - start recording and displaying a mca spectrum\n")
+	printf("      savepca3 - save the last spectrum recorded by pca3\n")
+ 	printf("    energy_cal - calibrate energy scale using peaks defined in setpca3\n")
+	printf("\n For the usage of each macro, type the name of the macro and then\n")
+	printf(" press <Enter>.\n")
+}'
+
+def pca3_manual '{
+	tty_move(0,21)
+	printf("   FUNCTION KEYS:\n")
+	printf("-----------------------------------------\n")
+	printf("    Reduce width         |        [u]    \n")
+	printf("  Increase width         |        [i]    \n")
+	printf("Move center down (coarse)|        [j]    \n")
+	printf("  Move center up (coarse)|        [k]    \n")
+	printf("Move center down (fine)  |        [n]    \n")
+	printf("  Move center up (fine)  |        [m]    \n") 
+	printf("       Quit pca3         |        [X]    \n")
+	printf("-----------------------------------------\n")
+	printf("** To find the channel number of a point, move it to the left **\n")
+	printf("** (or right) margin of the display window                    **\n")
+}'
+
+
+def pca3 '{
+	local lt ltsec trate i j plot_grp key scenter swidth sstart wcenter wwidth wstart wsum ct bgcts netcts wfwhm wcfwhm max     
+
+	if(($# != 2)&($# != 3)){printf("** USAGE: pca3 [LL of ch.] [UL of ch.] [1 to start a new data collection]")
+                                exit}
+
+	float array peakinfo[3][4]
+
+	plot_cntl("open")
+	plot_cntl("filter2")
+	tty_cntl("cl")
+	plot_cntl("erase")
+	plot_cntl("-lines")
+	plot_cntl("-dots")
+	pca3_manual
+	tty_move(0,7)
+	printf(" Peak    Range    FWHM    CFWHM    Total    Net\n")
+	printf(" -------------------------------------------------\n")
+	printf(" %s\n",pca_peaktitle1)
+	printf(" %s\n",pca_peaktitle2)
+	printf(" %s\n",pca_peaktitle3)
+	tty_move(0,13)
+	printf(" Pulser Frequency = %.1f Hz\n",pca_pulserf)
+	printf(" E/C conversion: E = %.5f + %.5f * Channel\n",pca_ecalb,pca_ecala) 
+	sstart=$1
+	swidth=$2-$1+1
+	scenter=int(($1+$2)/2)
+	wcenter=pca_wcenter
+	wwidth=pca_wwidth
+	array_op("fill",spectrum[0:511][1],0,0)
+	if($3==1){
+		mca_par("clear")
+		pca_ct=0}
+	j=0
+ 	for(;;){
+		tcount(pca_time)
+		if(j>0){
+			plot_cntl("mca")
+			max=array_op("max",spectrum[sstart:(sstart+swidth-1)][1])
+			if(pca_xscale==0){
+				plot_range(sstart,sstart+swidth-1,0,max)}
+			else if(pca_xscale==1){
+				plot_range(pca_ecalb+pca_ecala*sstart,pca_ecalb+pca_ecala*(sstart+swidth-1),0,max)}
+			array_plot(spectrum)}
+		while(wait(34)){
+			key=input(0)
+			if(key!=""){
+			tty_move(0,0)
+			printf("               ")
+			tty_move(0,0)
+		if((key=="k")&((scenter+5+0.5*swidth)<pca_gsize))
+					{scenter=scenter+5}
+		if((key=="j")&((scenter-5-0.5*swidth)>0))
+					{scenter=scenter-5}
+		if((key=="i")&((scenter+0.5*swidth+5)<pca_gsize)&((scenter-0.5*swidth-5)>0))
+					{swidth=swidth+5}
+		if((key=="u")&((swidth-5)>0))
+					{swidth=swidth-5}			
+		if((key=="m")&((scenter+1+0.5*swidth)<pca_gsize))
+					{scenter=scenter+1}
+		if((key=="n")&((scenter-1-0.5*swidth)>0))
+					{scenter=scenter-1}
+		if(key=="X"){
+					pca_wcenter=wcenter
+					pca_wwidth=wwidth
+					plot_cntl("filter1")
+					plot_cntl("dots")
+					plot_cntl("lines")
+					tty_move(0,36)
+					exit}}}
+		mca_get(data)
+		spectrum[][1]=data[][0]
+		pca_ct=pca_ct+pca_time
+		sstart=scenter-int(0.5*swidth)
+		lt=array_op("sum",spectrum[pca_pulserll:pca_pulserul][1])/pca_pulserf
+#lt=pca_ct
+		ltsec=lt/pca_ct
+		trate=array_op("sum",spectrum[][1])/pca_ct
+		
+		peakinfo[0][0]=array_op("fwhm",spectrum[pca_analysis[0][0]:pca_analysis[0][1]][0],spectrum[pca_analysis[0][0]:pca_analysis[0][1]][1])
+		peakinfo[0][1]=array_op("cfwhm",spectrum[pca_analysis[0][0]:pca_analysis[0][1]][0],spectrum[pca_analysis[0][0]:pca_analysis[0][1]][1])
+		peakinfo[0][2]=array_op("sum",spectrum[pca_analysis[0][0]:pca_analysis[0][1]][1])
+		peakinfo[0][3]=peakinfo[0][2]-(spectrum[pca_analysis[0][0]][1]+spectrum[pca_analysis[0][1]][1])*(pca_analysis[0][1]+1-pca_analysis[0][0])/2
+
+		peakinfo[1][0]=array_op("fwhm",spectrum[pca_analysis[1][0]:pca_analysis[1][1]][0],spectrum[pca_analysis[1][0]:pca_analysis[1][1]][1])
+		peakinfo[1][1]=array_op("cfwhm",spectrum[pca_analysis[1][0]:pca_analysis[1][1]][0],spectrum[pca_analysis[1][0]:pca_analysis[1][1]][1])
+		peakinfo[1][2]=array_op("sum",spectrum[pca_analysis[1][0]:pca_analysis[1][1]][1])
+		peakinfo[1][3]=peakinfo[1][2]-(spectrum[pca_analysis[1][0]][1]+spectrum[pca_analysis[1][1]][1])*(pca_analysis[1][1]+1-pca_analysis[1][0])/2
+
+		peakinfo[2][0]=array_op("fwhm",spectrum[pca_analysis[2][0]:pca_analysis[2][1]][0],spectrum[pca_analysis[2][0]:pca_analysis[2][1]][1])
+		peakinfo[2][1]=array_op("cfwhm",spectrum[pca_analysis[2][0]:pca_analysis[2][1]][0],spectrum[pca_analysis[2][0]:pca_analysis[2][1]][1])
+		peakinfo[2][2]=array_op("sum",spectrum[pca_analysis[2][0]:pca_analysis[2][1]][1])
+		peakinfo[2][3]=peakinfo[2][2]-(spectrum[pca_analysis[2][0]][1]+spectrum[pca_analysis[2][1]][1])*(pca_analysis[2][1]+1-pca_analysis[2][0])/2
+		
+		tty_move(0,1)
+		printf(" C.T. = %.1f \n",pca_ct)
+		printf(" L/R  = %d / %d \n",spectrum[sstart][1],spectrum[sstart+swidth][1])
+		printf(" Life Time = %.1f (%.3f) \n",lt,ltsec) 
+		printf(" Total count rate = %.1f \n",trate)
+		tty_move(9,9)
+		printf("%d:%d  %.3f   %.3f   %d   %d   \n",pca_analysis[0][0],pca_analysis[0][1],peakinfo[0][0],peakinfo[0][1],peakinfo[0][2],peakinfo[0][3])
+		tty_move(9,10)
+		printf("%d:%d  %.3f   %.3f   %d   %d   \n",pca_analysis[1][0],pca_analysis[1][1],peakinfo[1][0],peakinfo[1][1],peakinfo[1][2],peakinfo[1][3])
+		tty_move(9,11)
+		printf("%d:%d  %.3f   %.3f   %d   %d   \n",pca_analysis[2][0],pca_analysis[2][1],peakinfo[2][0],peakinfo[2][1],peakinfo[2][2],peakinfo[2][3])
+		tty_move(0,0)
+		j++}
+}'
+
+
+def savepca3 '{
+	local title pca2_datafile
+
+	if($# != 1){printf("This macro will save the last spectrum taken by pca2.")
+		    printf("\n** USAGE: savepca2 [filename]")
+		    exit}
+	pca2_datafile="$1"
+	getvar "\nTitle: " title 
+	on(pca2_datafile)
+	offt
+	fprintf(pca2_datafile,"Title: %s",title)
+	array_dump(spectrum)	
+	close(pca2_datafile)
+	ont
+}'
+
+
+def pca_array '{
+	float array pca_ecal[4][2] 
+	ulong array pca_analysis[3][2]
+	pca_define_array=1
+}'
+
+def setpca3 '{
+	local op opp
+
+	if(pca_define_array!=1){pca_array}
+	tty_cntl("cl")
+	tty_move(5,0)
+	printf("     PCAIII PARAMETERS :\n\n")
+	printf("  (1) Total no of channels = %d\n",pca_gsize)
+	printf("  (2) Screen update time = %.2f (sec)\n",pca_time)
+	printf("\n  Pulser:\n")
+	printf("  (3) Frequency = %.1f (Hz)   (4) LL = %d   (5) UL = %d\n",pca_pulserf,pca_pulserll,pca_pulserul)
+	printf("\n  Peaks for energy calibration:\n")
+	printf("       Peak         Channel #        Energy (keV)\n")
+	printf("       ------------------------------------------\n")
+	printf("         1        (6)              (7)\n")
+	printf("         2        (8)              (9)\n")
+	printf("         3       (10)             (11)\n")
+	printf("         4       (12)             (13)\n")
+	if(pca_xscale==0){
+	printf("\n  (14) Spectrum displayed in channel number\n")}
+	if(pca_xscale==1){
+	printf("\n  (14) Spectrum displayed in energy (keV)\n")}  
+	printf("\n  Define peaks:\n")
+	printf("       Title          LL               UL\n")
+	printf("       ------------------------------------------\n")
+	printf("  (15)           (16)             (17)\n")
+	printf("  (18)           (19)             (20)\n")
+	printf("  (21)           (22)             (23)\n")
+	tty_move(22,11);printf("%.1f",pca_ecal[0][0]);tty_move(39,11);printf("%.3f",pca_ecal[0][1])
+	tty_move(22,12);printf("%.1f",pca_ecal[1][0]);tty_move(39,12);printf("%.3f",pca_ecal[1][1])
+	tty_move(22,13);printf("%.1f",pca_ecal[2][0]);tty_move(39,13);printf("%.3f",pca_ecal[2][1])
+	tty_move(22,14);printf("%.1f",pca_ecal[3][0]);tty_move(39,14);printf("%.3f",pca_ecal[3][1])
+	tty_move(7,21);printf("%s",pca_peaktitle1);tty_move(22,21);printf("%d",pca_analysis[0][0]);tty_move(39,21);printf("%d",pca_analysis[0][1])
+	tty_move(7,22);printf("%s",pca_peaktitle2);tty_move(22,22);printf("%d",pca_analysis[1][0]);tty_move(39,22);printf("%d",pca_analysis[1][1])
+	tty_move(7,23);printf("%s",pca_peaktitle3);tty_move(22,23);printf("%d",pca_analysis[2][0]);tty_move(39,23);printf("%d",pca_analysis[2][1])
+	op=0
+	opp=-1
+	while (opp) {
+		opp=-1
+		while (opp < 0 || opp > 23){
+			tty_move(0,25)
+			tty_cntl("cd")
+			opp = getval(\
+		       "  Enter 1-23 to change a parameter, or 0 to quit", op)
+		}
+		op = opp
+		_pca3_opt op
+		op = (opp + 1)%24
+	}
+	initialize_pca3 pca_gsize	
+        tty_cntl("cl")
+}'
+
+def _pca3_par '
+	tty_move(1,27); tty_cntl("cd")
+	$4 = getval("     $1", $4)
+	tty_move(28, $3)          #; tty_cntl("ce")
+#	printf("$2", $4)
+'
+
+def _pca3_opt '
+local base
+base=2
+if ($1==1) {
+ _pca3_par "Total number of channels (512/1024/...)" "" base pca_gsize
+ tty_move(29,2);printf("%d    ",pca_gsize)
+} else if ($1==2) {
+ _pca3_par "Screen update time (sec)" "" base+1 pca_time
+ tty_move(27,3);printf("%.2f (sec)   ",pca_time)
+} else if ($1==3) {
+ _pca3_par "Pulser frequency (Hz)" "" base+4 pca_pulserf
+ tty_move(0,6);printf("  (3) Frequency = %.1f (Hz)   (4) LL = %d   (5) UL = %d     \n",pca_pulserf,pca_pulserll,pca_pulserul)
+} else if ($1==4) {
+ _pca3_par "Pulser LL" "" base+5 pca_pulserll
+ tty_move(0,6);printf("  (3) Frequency = %.1f (Hz)   (4) LL = %d   (5) UL = %d     \n",pca_pulserf,pca_pulserll,pca_pulserul)
+} else if ($1==5) {
+ _pca3_par "Pulser UL" "" base+6 pca_pulserul
+ tty_move(0,6);printf("  (3) Frequency = %.1f (Hz)   (4) LL = %d   (5) UL = %d     \n",pca_pulserf,pca_pulserll,pca_pulserul)
+} else if ($1==6) {
+ _pca3_par "Energy calibration: Peak 1 channel number" "" base+9 pca_ecal[0][0]
+ tty_move(22,11);printf("%.1f   ",pca_ecal[0][0])
+} else if ($1==7) {
+ _pca3_par "Energy calibration: Peak 1 energy (keV)" "" base+10 pca_ecal[0][1]
+ tty_move(39,11);printf("%.3f    ",pca_ecal[0][1])
+} else if ($1==8) {
+ _pca3_par "Energy calibration: Peak 2 channel number" "" base+11 pca_ecal[1][0]
+ tty_move(22,12);printf("%.1f   ",pca_ecal[1][0])
+} else if ($1==9) {
+ _pca3_par "Energy calibration: Peak 2 energy (keV)" "" base+12 pca_ecal[1][1]
+ tty_move(39,12);printf("%.3f    ",pca_ecal[1][1])
+} else if ($1==10) {
+ _pca3_par "Energy calibration: Peak 3 channel number" "" base+13 pca_ecal[2][0]
+ tty_move(22,13);printf("%.1f   ",pca_ecal[2][0])
+} else if ($1==11) {
+ _pca3_par "Energy calibration: Peak 3 energy (keV)" "" base+14 pca_ecal[2][1]
+ tty_move(39,13);printf("%.3f    ",pca_ecal[2][1])
+} else if ($1==12) {
+ _pca3_par "Energy calibration: Peak 4 channel number" "" base+15 pca_ecal[3][0]
+ tty_move(22,14);printf("%.1f   ",pca_ecal[3][0])
+} else if ($1==13) {
+ _pca3_par "Energy calibration: Peak 4 energy (keV)" "" base+16 pca_ecal[3][1]
+ tty_move(39,14);printf("%.3f    ",pca_ecal[3][1])
+} else if ($1==14) {
+ _pca3_par "Unit of x axis (0=channel number, 1=keV)" "" base+18 pca_xscale
+	tty_move(0,16)
+ 	if(pca_xscale==0){
+		printf("  (14) Spectrum displayed in channel number      \n")}
+	if(pca_xscale==1){
+		printf("  (14) Spectrum displayed in energy (keV)        \n")}  
+} else if ($1==15) {
+ _pca3_par "Peak analysis: Peak 1 title" "" base+21 pca_peaktitle1
+ tty_move(7,21);printf("%s   ",pca_peaktitle1)
+} else if ($1==16) {
+ _pca3_par "Peak analysis: Peak 1 LL" "" base+21 pca_analysis[0][0]
+ tty_move(22,21);printf("%d",pca_analysis[0][0])
+} else if ($1==17) {
+ _pca3_par "Peak analysis: Peak 1 UL" "" base+22 pca_analysis[0][1]
+ tty_move(39,21);printf("%d",pca_analysis[0][1])
+} else if ($1==18) {
+ _pca3_par "Peak analysis: Peak 2 title" "" base+21 pca_peaktitle2
+ tty_move(7,22);printf("%s   ",pca_peaktitle2)
+} else if ($1==19) {
+ _pca3_par "Peak analysis: Peak 2 LL" "" base+21 pca_analysis[1][0]
+ tty_move(22,22);printf("%d",pca_analysis[1][0])
+} else if ($1==20) {
+ _pca3_par "Peak analysis: Peak 2 UL" "" base+22 pca_analysis[1][1]
+ tty_move(39,22);printf("%d",pca_analysis[1][1])
+} else if ($1==21) {
+ _pca3_par "Peak analysis: Peak 3 title" "" base+21 pca_peaktitle3
+ tty_move(7,23);printf("%s   ",pca_peaktitle3)
+} else if ($1==22) {
+ _pca3_par "Peak analysis: Peak 3 LL" "" base+21 pca_analysis[2][0]
+ tty_move(22,23);printf("%d",pca_analysis[2][0])
+} else if ($1==23) {
+ _pca3_par "Peak analysis: Peak 3 UL" "" base+22 pca_analysis[2][1]
+ tty_move(39,23);printf("%d",pca_analysis[2][1])
+}'
+
+def mysavepca3 '{
+        local myfile set_number title pca2_datafile current_time
+  
+        if($# != 4){printf("Save pcaIII data\n")
+                    printf("\n** USAGE: mysavepca3 [filename], sequence#")
+                    exit}
+        pca2_datafile=$1
+        set_number=$2
+        myfile=sprintf("%s.%g", pca2_datafile, set_number) 
+        on(myfile)
+        offt
+        current_time=date()
+        fprintf(myfile, "#%s\n", current_time) 
+        fprintf(myfile, "#counter1     2     3      4\n") 
+        fprintf(myfile, "#%g  %g  %g  %g\n", S[0], S[1],  S[2], S[3]) 
+        array_dump(spectrum)
+        close(myfile)
+        ont
+}'
+
+def filesavepca3_simple '{
+    local myfile set_number title pca3_datafile current_time
+
+    if($# != 5)
+    {
+        printf("Save pcaIII data\n")
+        printf("\n** USAGE: $0 [pca3_datafile], [set_number], [elapsed_live], [elapsed_real]")
+        exit
+    }
+    pca3_datafile=$1
+    set_number=$2
+    elapsed_live=$3
+    elapsed_real=$4
+
+    printf("Overall cts/s: ch1 %g     ch2 %g     ch3 %g      ch4 %g\n\n\n", S[0], S[1],  S[3], S[5]) 
+
+    myfile=sprintf("%s", pca3_datafile) 
+    on(myfile)
+    offt
+    current_time=date()
+    array_dump(spectrum)
+    close(myfile)
+    ont
+}'
+
+def filesavepca3 '{
+    local myfile set_number title pca3_datafile current_time keyence_pos
+
+    if ($# != 5) {
+        printf("Save pcaIII data\n")
+        printf("\n** USAGE: mysavepca3 [filename], sequence#, str")
+        exit
+    }
+    
+    pca3_datafile=$1
+    set_number=$2
+    elapsed_live=$3
+    elapsed_real=$4
+    keyence_pos = epics_get("6bma1:Keyence:1:ch1")*-1
+    tiltx = epics_get("6bma1:USdig_T7:1:Angle")
+
+#        printf("Overall cts/s: ch1 %g     ch2 %g     ch3 %g      ch4 %g\n\n\n", S[0], S[1],  S[2], S[3]) 
+
+
+    myfile=sprintf("%s", pca3_datafile) 
+    on(myfile)
+    offt
+    current_time=date()
+    fprintf(myfile, "#Scan %g %s\n", set_number, current_time) 
+    fprintf(myfile, "#At end of scan, counts: %g  %g  %g  %g\n", S[0], S[1], S[3], S[5]) 
+    # fprintf(myfile, "#xr yr zr = %g %g %g\n", A["16"], A["17"], A["18"])
+    #fprintf(myfile, "#xr yr zr hx hy hz hu hv hw keyence = %g %g %g %g %g %g %g %g %g %g\n", A["16"], A["17"], A["18"], A[hx], A[hy], A[hz], A[hu], A[hv], A[hw], keyence_pos )
+    #fprintf(myfile, "#xr yr zr hx hy hz hu hv hw keyence = %g %g %g %g %g %g %g %g %g %g\n", A[xr], A[yr], A[zr], A[hx], A[hy], A[hz], A[hu], A[hv], A[hw], keyence_pos )
+    #fprintf(myfile, "#xr yr zr roty ksamx ksamz ksamrx ksamrz hw keyence = %g %g %g %g %g %g %g %g %g %g\n", A[xr], A[yr], A[zr], A[roty], A[ksamx], A[ksamz], A[ksamrx], A[ksamrz], A[hw], keyence_pos )
+    #fprintf(myfile, "#xr yr zr roty ksamx ksamry ksamz hw preci keyence = %g %g %g %g %g %g %g %g %g %g\n", A[xr], A[yr], A[zr], A[roty], A[ksamx], A[ksamry], A[ksamz], A[hw], A[preci], keyence_pos )
+    # standard stages (preci + kohzu[3t+2r]) 2/8/2018 by AC
+    fprintf(myfile, "#xr yr zr ksamx ksamz ksamrx ksamrz preci tiltx keyence = %g %g %g %g %g %g %g %g %g %g\n", A[xr], A[yr], A[zr], A[ksamx], A[ksamz], A[ksamrx], A[ksamrz], A[preci], tiltx, keyence_pos )
+
+#        fprintf(myfile, "#elapsed_live=%g   elapsed_real=%g   %s\n", elapsed_live, elapsed_real, str) 
+
+    array_dump(spectrum)
+    close(myfile)
+    ont
+}'
+
+def motor_cam '{
+    if ( !($# == 6 || $# == 7) ) {
+        printf("\n")
+        printf("\n** USAGE: $0 [file_name] [m_name] [start_p] [end_p] [num_points] [preset_time] [ignore_shutter]")
+        exit
+    }
+    local doing file_name preset_time waits m_name 
+    local start_p end_p motor_position motor_step 
+    local str file_n1 file_n2 iii file_hv
+    local total_compton total_elastic
+    local after waiting time_beamdown_start time_beamdown
+    local cut_off
+    local log_file_name
+    local det_status
+    local _ignore_shutter
+    local path_name file_name
+    #local _if_sweep _sweep_mtr _sweep_ini _sweep_fin
+    
+    #local _prefix _mtr_prefix _sweep_mtr_num
+    #local _del_sweep
+    #local _ome_dot_max _ome_dot _ome_dot0 _ome_dot_bas
+    #local _accel_time _hilim _lolim
+    #local _ome_dot_dot _ome_start
+    #local _sweep_ini_with_accel
+        
+    ### INITIALIZE VARIABLES
+    # float array spectrum[8192][2]
+    float array spectrum[8192][3]
+	ulong array data[8192][1]
+	
+    for (iii=1; iii<=8192; iii++) {
+        spectrum[iii-1][0]=iii;
+    }
+    
+    m_name="$2"
+    if (m_name=="yr") {
+        p "yr motion requested"
+        p "will be using mv_yr"
+    }
+    if (m_name!="yr") {
+        p "yr motion not requested"
+        p "will be using spec moves"
+    }
+    
+    start_p=$3
+    end_p=$4
+    num_points=$5-1
+    preset_time=$6
+    #_if_sweep=$7
+    #_sweep_mtr="$8"
+    #_sweep_ini=$9
+    #_sweep_fin=$10
+    #_use_input_fname=$11
+    _ignore_shutter=$7
+    
+    file_name="$1"
+    path_name="./"
+
+    p "++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+    p file_name
+    p "++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+    
+    log_file_name="motor_cam_run_log"
+    
+    waits=.2
+    cut_off=3000
+    
+    ## CHECKS SHUTTER FIRST
+    ## ADDED 2016-02-08 PARKJS
+    if (_ignore_shutter == 1) {
+        printf("\nWARNING! Simulation mode is \"ON\"\n")
+        printf("The program will not check shutter status !!\n")
+        printf("\n")
+        sleep(5)
+    } else {
+        while (epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF") {
+        p "shutter closed ... waiting"
+        sleep (10)
+        }
+    }
+    
+    str=sprintf("mkdir %s", file_name)
+    unix(str)
+    
+    file_n2=sprintf("%s/%s.xy", file_name, file_name)
+    
+    on(file_n2)
+    fprintf(file_n2, "#COMMAND: motor_cam $1 $2 $3 $4 $5 $6\n")
+
+    fprintf(file_n2, "# ")
+    for (doing=0; doing < MOTORS; doing++) {
+        fprintf(file_n2, "%s ", motor_mne(doing))
+    }
+    fprintf(file_n2, "\n")
+
+    fprintf(file_n2, "# ")
+    for (doing=0; doing < MOTORS; doing++) {
+        fprintf(file_n2, "%g ", A[doing])
+    }
+    fprintf(file_n2, "\n")
+    close(file_n2)
+
+    p log_file_name
+    motor_position=start_p
+    
+    if(num_points != 0) {
+        motor_step=(end_p-start_p)/num_points
+    } else {
+        motor_step=0
+    }
+
+    printf("The scan will take %g minutes\n", (preset_time+waits)*(num_points+1)/60 )
+    for (doing=0; doing <= num_points; doing++) {
+        printf("Doing scan %g of %g, Motor %s now at %g, %g minutes to go\n", doing+1, num_points+1, m_name, motor_position, (preset_time+waits)*(num_points+1-doing)/60 )
+        
+        # umv $2 motor_position
+        if (m_name=="yr") {
+            p "yr motion requested"
+            p "will be using mv_yr"
+            #mv_yr motor_position
+            umv $2 motor_position
+        }
+        if (m_name!="yr") {
+            umv $2 motor_position
+        }
+        
+        wm xr yr zr ksamx ksamz preci
+
+        #### add 08/19/2016 by AC to wait for beam recovery
+        if (_ignore_shutter == 0) {
+            time_beamdown_start = time()
+            while (epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF"){
+                printf("shutter closed ... waiting %d seconds\n",time() - time_beamdown_start)
+                sleep (30)
+            }
+        }
+        
+        #### add 11/21/2016 by AC to monitor yr position (compare keyence vs spec)
+        # if (m_name == "yr") {
+        #     yr_pos = epics_get("6bma1:m18")
+        #     keyence_pos = epics_get("6bma1:Keyence:1:ch1")
+        #     printf("\n yr = %g, keyence = %g, offset = %g mm\n\n",  yr_pos, keyence_pos*-1, yr_pos+keyence_pos)
+        # }
+
+        printf("Motor in position, starting canberra ...\n" )
+        
+        ### USING THE BNL NI HARDWARE
+        # Use ""motor_cam"" right after ""dscan"", if preset_time is the same as the previous preset_time,
+        # detector will not start properly!! 
+        # add an additional line to solve this issue (8/22/16 by AC)
+        epics_put("6bmXMAP:PresetReal", preset_time+0.077)
+        epics_put("6bmXMAP:PresetReal", preset_time)
+        
+        ### NEED TO MOVE HERE
+        p "*****************************"
+        p "still shot mode requested"
+        p "*****************************"
+        
+        ### START TAKING DATA
+        epics_put("6bmXMAP:EraseStart", 1)
+        sleep(preset_time)
+        
+        ### CHECK IF DATA COLLECTION COMPLETE
+        det_status=epics_get("6bmXMAP:Acquiring")
+        while (det_status!="Done") {
+            det_status=epics_get("6bmXMAP:Acquiring")
+        }
+        
+        #     mca_par("clear")
+        #     mca_par("live")
+        #     mca_par("run")
+        #     sleep(preset_time)
+        #     mca_par("halt")
+        #     sleep(waits)
+        
+        # mca_get(data)
+        # spectrum[][1]=data[][0]
+        
+        mca_sget(0, data)
+        spectrum[][1]=data[][0]
+        mca_sget(1, data)
+        spectrum[][2]=data[][0]
+        
+        #     elapsed_live=mca_par("elapsed_live")
+        #     elapsed_real=mca_par("elapsed_real")
+             
+        #     printf("live time %g seconds\n", elapsed_live)
+        #     printf("real time %g seconds\n", elapsed_real)
+        #     printf("dead time %g percent\n", 100.*(elapsed_real-elapsed_live)/elapsed_real )
+
+        str=sprintf("%s at %g ", "$2", motor_position) 
+        
+        file_n1=sprintf("%s/%s/%s-%03d.xy", path_name, file_name, file_name, doing+1)
+        
+        off(log_file_name)
+        off(sprintf("%s.log.log", EXPID))
+        off(sprintf("%s.log", EXPID))
+        filesavepca3 file_n2 doing elapsed_live elapsed_real str 
+        filesavepca3_simple file_n1 doing elapsed_live elapsed_real str
+        #array_dump(file_hv, epics_get("6bmXMAP:mca1.VAL"), epics_get("6bmXMAP:mca2.VAL"))      # disabled 2/8/2018 by AC, no longer needed!!
+        
+        on(log_file_name)
+        on(sprintf("%s.log.log", EXPID))
+        on(sprintf("%s.log", EXPID))
+        plot_cntl("open")
+        # plot_cntl("filter2")
+        # tty_cntl("cl")
+        plot_cntl("erase")
+        plot_cntl("lines")
+        # plot_cntl("-lines")
+        # plot_cntl("-dots")
+        array_plot(spectrum)   
+        motor_position=motor_position+motor_step
+        
+        ### PARFILE
+        local parfilename
+        local _dt _dt1 _dt2 _done
+        
+        get_angles
+        
+        _dt=epics_get("6bmXMAP:DeadTime");
+        _dt1=epics_get("6bmXMAP:mca1.IDTIM");
+        _dt2=epics_get("6bmXMAP:mca2.IDTIM");
+        _done=doing+1;
+        
+        keyence=epics_get("6bma1:Keyence:1:ch1.VAL");
+        tiltx=epics_get("6bma1:USdig_T7:1:Angle");
+        parfilename="exposures_record_summary.par"
+        
+        on(parfilename)
+        p date(), file_name, _done, _dt, _dt1, _dt2, A[xr], A[yr], A[zr], A[ksamx], A[ksamz], A[ksamrx], A[ksamrz], A[preci], tiltx, keyence, _if_sweep, _sweep_mtr, _sweep_ini, _sweep_fin
+        off(parfilename)
+        
+        get_beamline_parameters
+        write_parfile
+    }
+    # umv $1 start_p
+}'
+
+
+def motor_cam_sweep '{
+    if($# != 12) {
+        printf("\n")
+        printf("\n** USAGE: $0 [file_name] [m_name] [start_p] [end_p] [num_points] [preset_time] [if_sweep] [sweep_mtr] [sweep_ini] [sweep_fin] [use_input_fname] [ignore_shutter]")
+        exit
+    }
+    local doing file_name preset_time waits m_name 
+    local start_p end_p motor_position motor_step 
+    local str file_n1 file_n2 iii file_hv
+    local total_compton total_elastic
+    local after waiting time_beamdown_start time_beamdown
+    local cut_off
+    local log_file_name
+    local det_status
+    local _ignore_shutter
+    local path_name file_name
+    local _if_sweep _sweep_mtr _sweep_ini _sweep_fin
+    
+    local _prefix _mtr_prefix _sweep_mtr_num
+    local _del_sweep
+    local _ome_dot_max _ome_dot _ome_dot0 _ome_dot_bas
+    local _accel_time _hilim _lolim
+    local _ome_dot_dot _ome_start
+    local _sweep_ini_with_accel
+        
+    ### INITIALIZE VARIABLES
+    # float array spectrum[8192][2]
+    float array spectrum[8192][3]
+	ulong array data[8192][1]
+	
+    for (iii=1; iii<=8192; iii++) {
+        spectrum[iii-1][0]=iii;
+    }
+    
+    m_name="$2"
+    if (m_name=="yr") {
+        p "yr motion requested"
+        p "will be using mv_yr"
+    }
+    if (m_name!="yr") {
+        p "yr motion not requested"
+        p "will be using spec moves"
+    }
+    
+    start_p=$3
+    end_p=$4
+    num_points=$5-1
+    preset_time=$6
+    _if_sweep=$7
+    _sweep_mtr="$8"
+    _sweep_ini=$9
+    _sweep_fin=$10
+    _use_input_fname=$11
+    _ignore_shutter=$12
+    
+    if (_use_input_fname) {
+        file_name="$1"
+        path_name="./"
+    } else {
+        file_name=epics_get("6bma2:userStringCalc8.AA")
+        path_name=epics_get("6bma2:userStringCalc8.BB")
+    }
+    p "++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+    p file_name
+    p "++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+    
+    log_file_name="motor_cam_run_log"
+    
+    waits=.2
+    cut_off=3000
+    
+    ## CHECKS SHUTTER FIRST
+    ## ADDED 2016-02-08 PARKJS
+    if (_ignore_shutter == 1) {
+        printf("\nWARNING! Simulation mode is \"ON\"\n")
+        printf("The program will not check shutter status !!\n")
+        printf("\n")
+        sleep(5)
+    } else {
+        while (epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF") {
+        p "shutter closed ... waiting"
+        sleep (10)
+        }
+    }
+    
+    if (_use_input_fname) {
+        str=sprintf("mkdir %s", file_name)
+        unix(str)
+    } 
+    
+    if (_use_input_fname) {
+        file_n2=sprintf("%s/%s.xy", file_name, file_name)
+    } else {
+        file_n2=sprintf("%s/%s/%s.xy", path_name, file_name, file_name)
+    }
+    
+    on(file_n2)
+    fprintf(file_n2, "#COMMAND: motor_cam $1 $2 $3 $4 $5 $6\n")
+
+    fprintf(file_n2, "# ")
+    for (doing=0; doing < MOTORS; doing++) {
+        fprintf(file_n2, "%s ", motor_mne(doing))
+    }
+    fprintf(file_n2, "\n")
+
+    fprintf(file_n2, "# ")
+    for (doing=0; doing < MOTORS; doing++) {
+        fprintf(file_n2, "%g ", A[doing])
+    }
+    fprintf(file_n2, "\n")
+    close(file_n2)
+
+    p log_file_name
+    motor_position=start_p
+    
+    if(num_points != 0) {
+        motor_step=(end_p-start_p)/num_points
+    } else {
+        motor_step=0
+    }
+
+    printf("The scan will take %g minutes\n", (preset_time+waits)*(num_points+1)/60 )
+    for (doing=0; doing <= num_points; doing++) {
+        printf("Doing scan %g of %g, Motor %s now at %g, %g minutes to go\n", doing+1, num_points+1, m_name, motor_position, (preset_time+waits)*(num_points+1-doing)/60 )
+        
+        # umv $2 motor_position
+        if (m_name=="yr") {
+            p "yr motion requested"
+            p "will be using mv_yr"
+            #mv_yr motor_position
+            umv $2 motor_position
+        }
+        if (m_name!="yr") {
+            umv $2 motor_position
+        }
+        
+        wm xr yr zr ksamx ksamz preci
+
+        #### add 08/19/2016 by AC to wait for beam recovery
+        # comment out 9/15/16 by JO for testing without beam (enable again. 4/8/17 by AC)
+        if (_ignore_shutter == 0) {
+            time_beamdown_start = time()
+            while (epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF"){
+                printf("shutter closed ... waiting %d seconds\n",time() - time_beamdown_start)
+                sleep (30)
+            }
+        }
+        
+        #### add 11/21/2016 by AC to monitor yr position (compare keyence vs spec)
+        # if (m_name == "yr") {
+        #     yr_pos = epics_get("6bma1:m18")
+        #     keyence_pos = epics_get("6bma1:Keyence:1:ch1")
+        #     printf("\n yr = %g, keyence = %g, offset = %g mm\n\n",  yr_pos, keyence_pos*-1, yr_pos+keyence_pos)
+        # }
+
+        printf("Motor in position, starting canberra ...\n" )
+        
+        ### USING THE BNL NI HARDWARE
+        # Use ""motor_cam"" right after ""dscan"", if preset_time is the same as the previous preset_time,
+        # detector will not start properly!! 
+        # add an additional line to solve this issue (8/22/16 by AC)
+        epics_put("6bmXMAP:PresetReal", preset_time+0.077)
+        epics_put("6bmXMAP:PresetReal", preset_time)
+        
+        ### NEED TO MOVE HERE
+        if (_if_sweep) {
+            p "*****************************"
+            p "sweep mode requested"
+            
+            ### FIND EPICS NAME
+            if (motor_par("$8", "unit") == 0) {
+                _prefix="6bma1:m";
+            }
+            
+            if (motor_par("$8", "unit") == 3) {
+                _prefix="6bmpreci:m";
+            }
+            
+            if ( _prefix == 0) {
+                p "*****************************"
+                p "motor not set for sweep mode"
+                exit
+            }
+            else {
+                p "*****************************"
+                p "sweeping mode"
+                p "motor ", _sweep_mtr, " will be moved from ", _sweep_ini, " to ", _sweep_fin
+                
+                _sweep_mtr_num=motor_par("$8", "channel")+1;
+                _mtr_prefix=sprintf("%s%d", _prefix, _sweep_mtr_num);
+                
+                _del_sweep = _sweep_fin - _sweep_ini;
+                _ome_dot = _del_sweep/preset_time; # THIS IS THE DESIRED VELOCITY
+                
+                _accel_time=0;
+                _accel_time=epics_get(sprintf("%s.ACCL", _mtr_prefix));
+                _ome_dot_max= epics_get(sprintf("%s.VMAX", _mtr_prefix)); ## MAX VELOCITY
+                _ome_dot0=epics_get(sprintf("%s.VELO", _mtr_prefix));
+                _ome_dot_bas=epics_get(sprintf("%s.VBAS", _mtr_prefix));
+                _hilim=epics_get(sprintf("%s.HLM", _mtr_prefix)); ## high limit
+                _lolim=epics_get(sprintf("%s.LLM", _mtr_prefix)); ## low limit
+                
+                p "*****************************"
+                p "motor prefix        :", _mtr_prefix
+                p "motor accel         :", _accel_time
+                p "motor max velocity  :", _ome_dot_max
+                p "motor base velocity :", _ome_dot_bas
+                p "motor high limit    :", _hilim
+                p "motor low limit     :", _lolim
+                
+                if (_accel_time==0)
+                {
+                    p "no acceleration time?"
+                    p "increase acceleration time for sweep motor"
+                    exit
+                }
+                
+                if (_ome_dot_bas > _ome_dot) {
+                    p "requested speed lower than base speed for sweep motor"
+                    p "increase base speed for sweep motor"
+                    exit
+                }
+                
+                _ome_dot_dot = _ome_dot/_accel_time; ## ACCERLATION
+                _ome_start = 0.5 * _ome_dot_dot * _accel_time * _accel_time;
+                
+                p "*****************************"
+                p "start pos   (deg)  : ", _sweep_ini
+                p "end   pos   (deg)  : ", _sweep_fin
+                p "delta omega (deg)  : ", _del_sweep
+                p "omega dot   (dps)  : ", _ome_dot
+                p "accel time  (s)    : ", _accel_time
+                p "accel       (dpss) : ", _ome_dot_dot
+                p "omega start (deg)  : ", _ome_start
+                
+                if (_ome_dot > _ome_dot_max) {
+                    p "*****************************"
+                    print "too fast"
+                    print "more frames or longer exposure"
+                    p "*****************************"
+                    exit
+                }
+                
+                _sweep_ini_with_accel = _sweep_ini - _ome_start;
+                _sweep_fin_with_accel = _sweep_fin + _ome_start;
+                p "*****************************"
+                print "going to ", _sweep_ini_with_accel, " to account for acceleration"
+                
+                ### START MOVING BEFORE TAKING DATA
+                umv "$8" _sweep_ini_with_accel
+                p "*****************************"
+                p "changing motor velocity for ", _mtr_prefix, " to ", _ome_dot
+                epics_put(sprintf("%s.VELO", _mtr_prefix), _ome_dot)
+                mv "$8" _sweep_fin_with_accel
+                sleep(_accel_time)
+            }
+        }
+        else {
+            p "*****************************"
+            p "still shot mode requested"
+        }
+        p "*****************************"
+        
+        ### START TAKING DATA
+        epics_put("6bmXMAP:EraseStart", 1)
+        sleep(preset_time)
+        
+        ### CHECK IF DATA COLLECTION COMPLETE
+        det_status=epics_get("6bmXMAP:Acquiring")
+        while (det_status!="Done") {
+            det_status=epics_get("6bmXMAP:Acquiring")
+        }
+        
+        ### RETURN BACK MOTOR SETTINGS IF IN SWEEP MODE
+        if (_if_sweep) {
+            p "*****************************"
+            p "returning motor settings"
+            epics_put(sprintf("%s.VELO", _mtr_prefix), _ome_dot_max/2)
+            p "changing motor velocity for ", _mtr_prefix, " to ", _ome_dot_max/2
+        }
+        p "*****************************"
+        #     mca_par("clear")
+        #     mca_par("live")
+        #     mca_par("run")
+        #     sleep(preset_time)
+        #     mca_par("halt")
+        #     sleep(waits)
+        
+        # mca_get(data)
+        # spectrum[][1]=data[][0]
+        
+        mca_sget(0, data)
+        spectrum[][1]=data[][0]
+        mca_sget(1, data)
+        spectrum[][2]=data[][0]
+        
+        #     elapsed_live=mca_par("elapsed_live")
+        #     elapsed_real=mca_par("elapsed_real")
+             
+        #     printf("live time %g seconds\n", elapsed_live)
+        #     printf("real time %g seconds\n", elapsed_real)
+        #     printf("dead time %g percent\n", 100.*(elapsed_real-elapsed_live)/elapsed_real )
+
+        str=sprintf("%s at %g ", "$2", motor_position) 
+        
+        if (_use_input_fname) {
+            file_n1=sprintf("%s/%s-%03d.xy", file_name, file_name, doing+1)
+            #file_hv=sprintf("%s/%s-%03d-hv.xy", file_name, file_name, doing+1)                 # disabled 2/8/2018 by AC, no longer needed!!
+        } else {
+            file_n1=sprintf("%s/%s/%s-%03d.xy", path_name, file_name, file_name, doing+1)
+            #file_hv=sprintf("%s/%s/%s-%03d-hv.xy", path_name, file_name, file_name, doing+1)   # disabled 2/8/2018 by AC, no longer needed!!
+        }
+        
+        off(log_file_name)
+        off(sprintf("%s.log.log", EXPID))
+        off(sprintf("%s.log", EXPID))
+        filesavepca3 file_n2 doing elapsed_live elapsed_real str 
+        filesavepca3_simple file_n1 doing elapsed_live elapsed_real str
+        #array_dump(file_hv, epics_get("6bmXMAP:mca1.VAL"), epics_get("6bmXMAP:mca2.VAL"))      # disabled 2/8/2018 by AC, no longer needed!!
+        
+        on(log_file_name)
+        on(sprintf("%s.log.log", EXPID))
+        on(sprintf("%s.log", EXPID))
+        plot_cntl("open")
+        # plot_cntl("filter2")
+        # tty_cntl("cl")
+        plot_cntl("erase")
+        plot_cntl("lines")
+        # plot_cntl("-lines")
+        # plot_cntl("-dots")
+        array_plot(spectrum)   
+        motor_position=motor_position+motor_step
+        
+        ### PARFILE
+        local parfilename
+        local _dt _dt1 _dt2 _done
+        
+        get_angles
+        
+        _dt=epics_get("6bmXMAP:DeadTime");
+        _dt1=epics_get("6bmXMAP:mca1.IDTIM");
+        _dt2=epics_get("6bmXMAP:mca2.IDTIM");
+        _done=doing+1;
+        
+        keyence=epics_get("6bma1:Keyence:1:ch1.VAL");
+        tiltx=epics_get("6bma1:USdig_T7:1:Angle");
+        # parfilename="exposures_record_summary.par"
+        parfilename="exposures_record_summary2.par"
+        
+        on(parfilename)
+        p date(), file_name, _done, _dt, _dt1, _dt2, A[xr], A[yr], A[zr], A[ksamx], A[ksamz], A[ksamrx], A[ksamrz], A[asamX], A[asamY], A[preci], tiltx, keyence, _if_sweep, _sweep_mtr, _sweep_ini, _sweep_fin
+        off(parfilename)
+        
+        get_beamline_parameters
+        write_parfile
+    }
+    # umv $1 start_p
+}'
+
+def pca3_help '{
+	printf("\n PCA3 macro list:\n\n")
+	printf("       setpca3 - define pca3 parameter\n")
+	printf("          pca3 - start recording and displaying a mca spectrum\n")
+	printf("      savepca3 - save the last spectrum recorded by pca3\n")
+ 	printf("    energy_cal - calibrate energy scale using peaks defined in setpca3\n")
+	printf("\n For the usage of each macro, type the name of the macro and then\n")
+	printf(" press <Enter>.\n")
+}'
+
+def write_parfile '{
+    local parpfname
+    parpfname="exposure_record_full.par";
+    p "writing out information to ", parpfname
+    
+    on(parpfname)
+    p date(),sprintf("%15.8f", epoch_time),elapsed_time,Iring,undgapval,energynom,energycal,foilpos,attnpos,\
+        file_name,_done,_dt1,preset_time,\
+        file_name,_done,_dt2,preset_time,\
+        dval,dval,dval,dval,\
+        dval,dval,dval,dval,\
+        dval,dval,dval,dval,\
+        dval,dval,dval,dval,\
+        dval,dval,dval,dval,\
+        dval,dval,dval,dval,\
+        dval,dval,dval,dval,\
+        dval,dval,dval,dval,\
+        S[i0],preamp1,dval,dval,dval,dval,dval,dval,dval,dval,dval,dval,dval,dval,dval,dval,dval,dval,dval,dval,\
+        samX,samY,samZ,rx,ry,rz,samX2,samY2,samZ2,samZ3,\
+        ge1X,ge1Y,ge1Z,ge2X,ge2Y,ge2Z,ge3X,ge3Y,ge3Z,ge4X,ge4Y,ge4Z,\
+        det5X,det5Y,det5Z,det6X,det6Y,det6Z,det7X,det7Y,det7Z,det8X,det8Y,det8Z,det9X,det9Y,det9Z,det10X,det10Y,det10Z,\
+        hexpos1,hexpos2,hexpos3,hexpos4,hexpos5,hexpos6,hexpos7,\
+        p1o,p1i,p1b,p1t,p2o,p2i,p2b,p2t,p3o,p3i,p3b,p3t,p4o,p4i,p4b,p4t,p5o,p5i,p5b,p5t,p6o,p6i,p6b,p6t,\
+        lens1pos1,lens1pos2,lens2pos1,lens2pos2,lens3pos1,lens3pos2,lens4pos1,lens4pos2,\
+        enc1,enc2,enc3,enc4,enc5,enc6,enc7,enc8,enc9,enc10,\
+        ev1,ev2,ev3,ev4,ev5,ev6,ev7,ev8,ev9,ev10
+    off(parpfname)
+    close(parpfname)
+}'
+
+def get_beamline_parameters '{
+    get_angles
+    get_counts
+
+    dval=999;
+    
+    epoch_time=sprintf("%15.8f", epics_get("6bma1:GTIM_TIME", "double"));
+    elapsed_time=epics_get("6bma2:scaler1.T");
+    Iring=epics_get("S35DCCT:currentCC");
+    undgapval=dval;
+    energynom=dval;
+    energycal=dval;
+    foilpos=dval;
+    attnpos=dval;
+    attenCpos=dval;
+    
+    preamp1=epics_get("6bma1:A1sens_num.VAL")*GetPreampUnit("6bma1:A1sens_unit.VAL");
+    preamp2=dval;
+    preamp3=dval;
+    preamp5=dval;
+    preamp4=dval;
+    preamp6=dval;
+    preamp7=dval;
+    preamp8=dval;
+    
+    samX=epics_get("6bma1:m19.RBV");
+    samY=epics_get("6bma1:m18.RBV");
+    samZ=epics_get("6bma1:m17.RBV");
+
+    rx=dval;
+    ry=epics_get("6bmpreci:m1.RBV");
+    rz=dval;
+    
+    samX2=epics_get("6bma1:m58.RBV");
+    samY2=epics_get("6bma1:m57.RBV");
+    samZ2=dval;
+
+    samZ3=dval;
+    
+    ge1X=epics_get("6bma1:m20.RBV");
+    ge1Y=epics_get("6bma1:m21.RBV");
+    ge1Z=dval;
+
+    ge2X=epics_get("6bma1:m30.RBV");
+    ge2Y=epics_get("6bma1:m31.RBV");
+    ge2Z=dval;
+    
+    ge3X=dval;
+    ge3Y=dval;
+    ge3Z=dval;
+
+    ge4X=dval;
+    ge4Y=dval;
+    ge4Z=dval;
+    
+    det5X=epics_get("6bma1:m26.RBV");
+    det5Y=epics_get("6bma1:m27.RBV");
+    det5Z=epics_get("6bma1:m25.RBV");
+
+    det6X=dval;
+    det6Y=dval;
+    det6Z=dval;
+
+    det7X=dval;
+    det7Y=dval;
+    det7Z=dval;
+
+    det8X=dval;
+    det8Y=dval;
+    det8Z=dval;
+    
+    det9X=dval;
+    det9Y=dval;
+    det9Z=dval;
+    
+    det10X=dval;
+    det10Y=dval;
+    det10Z=dval;
+    
+    hexpos1=dval;
+    hexpos2=dval;
+    hexpos3=dval;
+    hexpos4=dval;
+    hexpos5=dval;
+    hexpos6=dval;
+    hexpos7=dval;
+    
+    p1o=epics_get("6bma1:m1.RBV");
+    p1i=epics_get("6bma1:m2.RBV");
+    p1b=epics_get("6bma1:m3.RBV");
+    p1t=epics_get("6bma1:m4.RBV");
+    
+    p2o=epics_get("6bma1:m5.RBV");
+    p2i=epics_get("6bma1:m6.RBV");
+    p2b=epics_get("6bma1:m7.RBV");
+    p2t=epics_get("6bma1:m8.RBV");
+    
+    p3o=epics_get("6bmb1:m1.RBV");
+    p3i=epics_get("6bmb1:m3.RBV");
+    p3b=epics_get("6bmb1:m4.RBV");
+    p3t=epics_get("6bmb1:m2.RBV");
+
+    p4o=epics_get("6bma1:m58.RBV");
+    p4i=epics_get("6bma1:m57.RBV");
+    p4b=epics_get("6bma1:m59.RBV");
+    p4t=epics_get("6bma1:m60.RBV");
+    
+    p5o=epics_get("6bma1:m62.RBV");
+    p5i=epics_get("6bma1:m61.RBV");
+    p5b=epics_get("6bma1:m64.RBV");
+    p5t=epics_get("6bma1:m63.RBV");
+
+    p6o=dval;
+    p6i=dval;
+    p6b=dval;
+    p6t=dval;
+    
+    lens1pos1=dval;
+    lens1pos2=dval;
+    
+    lens2pos1=dval;
+    lens2pos2=dval;
+ 
+    lens3pos1=dval;
+    lens3pos2=dval;
+
+    lens4pos1=dval;
+    lens4pos2=dval;
+    
+    enc1=epics_get("6bma1:Keyence:1:ch1.VAL");
+    enc2=dval;
+    enc3=dval;
+    enc4=dval;
+    enc5=dval;
+    enc6=dval;
+    enc7=dval;
+    enc8=dval;
+    enc9=dval;
+    enc10=dval;
+    
+    ev1=dval;
+    ev2=dval;
+    ev3=dval;
+    ev4=dval;
+    ev5=dval;
+    ev6=dval;
+    ev7=dval;
+    ev8=dval;
+    ev9=dval;
+    ev10=dval;
+}'

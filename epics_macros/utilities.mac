@@ -1,0 +1,479 @@
+"""
+##########################################
+def mv_yr '{
+    if($# != 1) {
+        printf("\n")
+        printf("\n** USAGE: $0 [targetY]")
+        exit
+    }
+    
+    _targetY=$1;
+    
+    umv yr _targetY
+}'
+"""
+
+def mcact '{
+    if($# != 1) {
+        printf("\n** USAGE: $0 [exp_time]\n")
+        exit
+    }
+    
+    local _time
+    
+    _time = $1;
+    
+    if (_time == 0) {
+        _time = 1
+    }
+
+    epics_put("6bmXMAP:PresetReal", _time);
+    epics_put("6bmXMAP:EraseStart", "Erase");
+}'
+
+def chk_shutter '{
+    local wait_time
+    
+    if ($1 == 0) { wait_time = 30 }  # default wait time, 30 sec
+    
+    wait_time = $1
+    
+    while (epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF") {
+        epics_put("6bmb1:rShtrA:Open.VAL",1,0)
+        sleep (waiting)
+    }
+}'
+
+
+def SOpen '{
+    local delay tic slient
+
+    if ( $1 < 2) { delay = 2 }
+    else { delay = $1 }
+    
+    slient = $2
+    tic = time()
+
+    if ( slient == 0 ) { printf("Opening the shutter....") }
+    
+    while (epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF") {
+        epics_put("6bmb1:rShtrA:Open.VAL",1,0)
+        sleep (delay)
+    }
+    
+    if ( slient == 0 ) {printf("done. %4.2f sec.\n", time()-tic)}
+
+}'
+
+def SClose '{
+    local delay tic slient
+
+    if ( $1 < 2) { delay = 2 }
+    else { delay = $1 }
+    
+    slient = $2
+    tic = time()
+
+    if ( slient == 0 ) { printf("Closing the shutter....") }
+    
+    while (epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "ON") {
+        epics_put("6bmb1:rShtrA:Close.VAL",1,0)
+        sleep (delay)
+    }
+
+    if ( slient == 0 ) { printf("done. %4.2f sec.\n", time()-tic) }
+
+}'
+
+
+"""
+def mv_yr '{
+    if($# != 1) {
+        printf("\n")
+        printf("\n** USAGE: $0 [targetY]")
+        exit
+    }
+
+    local _Y _nY _iY _targetY _diffY
+    local _keyence 
+    local _counter
+    
+    _nY=1;
+    _targetY=$1;
+    _counter=0;
+    
+    get_angles;
+    _diffY=fabs(_targetY-A[yr]);
+    
+    while (_diffY > 0.002) {
+        mv yr _targetY
+        waitmove;
+        sleep(3)
+        
+        _nowY=epics_get("6bma1:m18.RBV");
+        _keyence=epics_get("6bma1:Keyence:1:ch1.VAL");
+        _diffY=fabs(epics_get("6bma1:userCalc2.VAL"));
+        
+        p "iter ", _counter , " current position: yr ", _nowY, ", keyence ", _keyence, " diff ", _diffY
+
+        if (_diffY > 1.0) {
+           p "offset is " "(> 1 mm), something must be wrong!!"
+           p "please check if Keyence is working!!"
+           break
+        }
+        
+        if (_diffY > 0.002) {
+            p "correcting yr position by "
+            p "setting yr to the current keyence reading"
+            p "then executing motion again"
+            set yr -_keyence
+        }
+        _counter=_counter+1;
+        
+        if (_counter > 10) {
+            break
+        }
+    }
+}'
+"""
+
+def ISsize '{
+
+    local v1size_old h1size_old h1offset_old v1offset_old
+    local v2size_old h2size_old h2offset_old v2offset_old
+
+    get_angles    
+    h1size_old   = A[s1out]-A[s1in];
+    v1size_old   = A[s1top]-A[s1bot];
+    h1offset_old = (A[s1out]+A[s1in])/2;
+    v1offset_old = (A[s1top]+A[s1bot])/2;
+
+    h2size_old   = A[s2out]-A[s2in];
+    v2size_old   = A[s2top]-A[s2bot];
+    h2offset_old = (A[s2out]+A[s2in])/2;
+    v2offset_old = (A[s2top]+A[s2bot])/2;
+
+    if ($# < 2 || $# > 3) {
+        printf("\n** USAGE: $0 [h_size] [v_size] [[s1-s2 offset]]")
+        printf("\n   *Note: slits need to be centered and zeroed!!")
+        printf("\n")
+        printf("\n Current S1: %2.3f x %2.3f , offset: %2.3f, %2.3f",h1size_old,v1size_old, h1offset_old, v1offset_old)
+        printf("\n Current S2: %2.3f x %2.3f , offset: %2.3f, %2.3f",h2size_old,v2size_old, h2offset_old, v2offset_old)
+        exit
+    }
+    
+    local vsize hsize offset 
+
+    hsize  = $1;
+    vsize  = $2;
+
+    if ($3 == 0) {
+        offset = 0.08;
+    } else {
+        offset = $3;
+    }
+    
+    p "Changing slit size (H x V)"
+    p "  S1: " h1size_old "x" v1size_old " ==> " hsize "x" vsize
+    p "  S2: " h2size_old "x" v2size_old " ==> " hsize+offset "x" vsize+offset
+    
+    get_angles;
+    A[s1in]  = -hsize/2
+    A[s1out] =  hsize/2
+    A[s1top] =  vsize/2
+    A[s1bot] = -vsize/2
+    
+    A[s2in]  = -hsize/2 - offset/2
+    A[s2out] =  hsize/2 + offset/2
+    A[s2top] =  vsize/2 + offset/2
+    A[s2bot] = -vsize/2 - offset/2
+
+    move_em
+    waitmove
+   
+}'
+    
+def WBsize '{
+    local vsize_old hsize_old
+
+    hsize_old = A[ush]-A[dsh];
+    vsize_old = A[usv]-A[dsv];
+
+    if ($# != 2) {
+        printf("\n** USAGE: $0 [h_size] [v_size]")
+        printf("\n   *Note: slits need to be centered and zeroed!!")
+        printf("\n Current: %2.3f x %2.3f , offset: %2.3f, %2.3f",hsize_old,vsize_old, hoffset_old, vpffset_old)
+
+        exit
+    }
+    
+    local vsize hsize
+
+    hsize  = $1;
+    vsize  = $2;
+  
+    p "Changing WB slit size (H x V)"
+    p "  WB slits: " hsize_old "x" vsize_old   " ==> " hsize "x" vsize
+    
+    get_angles;
+    A[ush]  = hsize/2
+    A[usv] =  vsize/2
+    A[dsh] = -hsize/2
+    A[dsv] = -vsize/2
+    
+    move_em
+    waitmove
+   
+}'
+
+def S1size '{
+
+    local vsize_old hsize_old hoffset_old voffset_old
+
+    get_angles    
+    hsize_old   = A[s1out]-A[s1in];
+    vsize_old   = A[s1top]-A[s1bot];
+    hoffset_old = (A[s1out]+A[s1in])/2;
+    voffset_old = (A[s1top]+A[s1bot])/2;
+
+    if ($# < 2 || $# > 4) {
+        printf("\n** USAGE: $0 [h_size] [v_size] [[h offset] [v offset]]")
+        printf("\n   *Note: slits need to be centered and zeroed!!")
+        printf("\n Current: %2.3f x %2.3f , offset: %2.3f, %2.3f",hsize_old,vsize_old, hoffset_old, voffset_old)
+        exit
+    }
+
+    local vsize hsize hoffset voffset    
+
+    hsize  = $1;
+    vsize  = $2;
+
+    if ($3 == 0) {
+        hoffset = 0;
+    } else {
+        hoffset = $3;
+    }
+
+    if ($4 == 0) {
+        voffset = 0;
+    } else {
+        voffset = $4;
+    }
+
+    p "Changing S1 slit size (H x V)"
+    printf("    size: %1.3f x %1.3f ==> %1.3f x %1.3f\n", hsize_old , vsize_old, hsize, vsize)
+    printf("   shift: %1.3f x %1.3f ==> %1.3f x %1.3f\n", hoffset_old, hoffset, voffset_old, voffset)
+    
+    get_angles;
+    A[s1in]  = -hsize/2+hoffset
+    A[s1out] =  hsize/2+hoffset
+    A[s1top] =  vsize/2+voffset
+    A[s1bot] = -vsize/2+voffset
+    
+    move_em
+    waitmove
+   
+}'
+
+def S2size '{
+
+    local vsize_old hsize_old hoffset_old voffset_old
+
+    get_angles    
+    hsize_old   = A[s2out]-A[s2in];
+    vsize_old   = A[s2top]-A[s2bot];
+    hoffset_old = (A[s2out]+A[s2in])/2;
+    voffset_old = (A[s2top]+A[s2bot])/2;
+
+    if ($# < 2 || $# > 4) {
+        printf("\n** USAGE: $0 [h_size] [v_size] [[h offset] [v offset]]")
+        printf("\n   *Note: slits need to be centered and zeroed!!")
+        printf("\n Current: %2.3f x %2.3f , offset: %2.3f, %2.3f",hsize_old,vsize_old, hoffset_old, voffset_old)
+        exit
+    }
+
+    local vsize hsize hoffset voffset    
+
+    hsize  = $1;
+    vsize  = $2;
+
+    if ($3 == 0) {
+        hoffset = 0;
+    } else {
+        hoffset = $3;
+    }
+
+    if ($4 == 0) {
+        voffset = 0;
+    } else {
+        voffset = $4;
+    }
+
+    p "Changing S2 slit size (H x V)"
+    printf("    size: %1.3f x %1.3f ==> %1.3f x %1.3f\n", hsize_old , vsize_old, hsize, vsize)
+    printf("   shift: %1.3f x %1.3f ==> %1.3f x %1.3f\n", hoffset_old, hoffset, voffset_old, voffset)
+    
+    get_angles;
+    A[s2in]  = -hsize/2+hoffset
+    A[s2out] =  hsize/2+hoffset
+    A[s2top] =  vsize/2+voffset
+    A[s2bot] = -vsize/2+voffset
+    
+    move_em
+    waitmove
+   
+}'
+
+def S4hsize '{
+
+    local vsize_old hsize_old hoffset_old voffset_old
+
+    get_angles    
+    hsize_old   = A[s4hout]-A[s4hin];
+    vsize_old   = A[s4htop]-A[s4hbot];
+    hoffset_old = (A[s4hout]+A[s4hin])/2;
+    voffset_old = (A[s4htop]+A[s4hbot])/2;
+
+    if ($# < 2 || $# > 4) {
+        printf("\n** USAGE: $0 [h_size] [v_size] [[h offset] [v offset]]")
+        printf("\n   *Note: slits need to be centered and zeroed!!")
+        printf("\n Current: %2.3f x %2.3f , offset: %2.3f, %2.3f",hsize_old,vsize_old, hoffset_old, voffset_old)
+        exit
+    }
+
+    local vsize hsize hoffset voffset    
+
+    hsize  = $1;
+    vsize  = $2;
+
+    if ($3 == 0) {
+        hoffset = 0;
+    } else {
+        hoffset = $3;
+    }
+
+    if ($4 == 0) {
+        voffset = 0;
+    } else {
+        voffset = $4;
+    }
+
+    p "Changing S4h slit size (H x V)"
+    printf("    size: %1.3f x %1.3f ==> %1.3f x %1.3f\n", hsize_old , vsize_old, hsize, vsize)
+    printf("   shift: %1.3f x %1.3f ==> %1.3f x %1.3f\n", hoffset_old, vhoffset_old, hoffset, voffset)
+    
+    get_angles;
+    A[s4hin]  = -hsize/2+hoffset
+    A[s4hout] =  hsize/2+hoffset
+    A[s4htop] =  vsize/2+voffset
+    A[s4hbot] = -vsize/2+voffset
+    
+    move_em
+    waitmove
+   
+}'
+
+def S4vsize '{
+
+    local vsize_old hsize_old hoffset_old voffset_old
+
+    get_angles    
+    hsize_old   = A[s4vout]-A[s4vin];
+    vsize_old   = A[s4vtop]-A[s4vbot];
+    hoffset_old = (A[s4vout]+A[s4vin])/2;
+    voffset_old = (A[s4vtop]+A[s4vbot])/2;
+
+    if ($# < 2 || $# > 4) {
+        printf("\n** USAGE: $0 [h_size] [v_size] [[h offset] [v offset]]")
+        printf("\n   *Note: slits need to be centered and zeroed!!")
+        printf("\n Current: %2.3f x %2.3f , offset: %2.3f, %2.3f",hsize_old,vsize_old, hoffset_old, voffset_old)
+        exit
+    }
+
+    local vsize hsize hoffset voffset    
+
+    hsize  = $1;
+    vsize  = $2;
+
+    if ($3 == 0) {
+        hoffset = 0;
+    } else {
+        hoffset = $3;
+    }
+
+    if ($4 == 0) {
+        voffset = 0;
+    } else {
+        voffset = $4;
+    }
+
+    p "Changing S4v slit size (H x V)"
+    printf("    size: %1.3f x %1.3f ==> %1.3f x %1.3f\n", hsize_old , vsize_old, hsize, vsize)
+    printf("   shift: %1.3f x %1.3f ==> %1.3f x %1.3f\n", hoffset_old, vhoffset_old, hoffset, voffset)
+    
+    get_angles;
+    A[s4vin]  = -hsize/2+hoffset
+    A[s4vout] =  hsize/2+hoffset
+    A[s4vtop] =  vsize/2+voffset
+    A[s4vbot] = -vsize/2+voffset
+    
+    move_em
+    waitmove
+   
+}'
+
+### Email Alerts
+def sendemailalert '{
+
+    # Usage:
+    #       sendemailalert "message text"
+    # Message text should be short for SMS/phone texting purposes
+    # If no message text given, general alert is sent out
+
+    global alerttext
+
+    if ($# >= 1) {
+       #alerttext = "$1"    
+       alerttext="$*"
+       # unix("sed -e s/TEXT/" $1 "/g", $1))
+    } else {
+       alerttext = "general alert"
+    }
+    if (length(alerttext) > 120) { p "Text message was too long (>120 char), so got cropped" ; alerttext=substr(alerttext, 1, 120) ; }
+    alerttext=sprintf("%s. Date: %s", alerttext, date())
+    p "Text message:", alerttext
+    unix(sprintf("sed -e \'s/TEXT/%s/g\' <./macro_set/alertmail.txt | sendmail %s ", alerttext, ALERTLIST))
+
+    #content=$1
+    #text=sprintf("Subject: 1ID SPEC alert %s at %s", content, date()) 
+    # TODO: Problem with the CR
+    #unix(sprintf("echo %s | sendmail %s", text, ALERTLIST))
+    p "WARNING! E-MAIL ALERT has been sent to " ALERTLIST
+    #p text
+}'
+
+
+
+
+
+"""
+if (m_name=="yr") {
+    p "yr motion requested"
+    p "will be using mv_yr"
+}
+if (m_name!="yr") {
+    p "yr motion not requested"
+    p "will be using spec moves"
+}
+
+if (m_name=="yr") {
+    p "yr motion requested"
+    p "will be using mv_yr"
+        mv_yr motor_position
+    }
+if (m_name!="yr") {
+    umv $2 motor_position
+}
+# umv $1 motor_position
+wm xr yr zr
+"""

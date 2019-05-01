@@ -1,0 +1,1426 @@
+def TomoScan6_freerun(fOmegaBegin, fOmegaStop, fOmegaStep, fExposureTime, sFolder, sPrefix, nFrame) '{
+    # loop over nframe, use PGSoftTrigger to trigger exposure 
+    #
+    local omega nWhiteField nDarkField i nImages settling_time nfileNumber fSampleShift fWFpos
+    local stagestartpos sShiftMotor t0 t1 tic tiltx detector_gain trigger_count trigger_wait capture_count
+    local verbose timeout folder_flag
+
+    verbose = 0      # for debug
+
+    nWhiteField = 10
+    nDarkField  = 10
+
+    sShiftMotor = yr
+    sOmegaMotor = preci
+    fSampleShift= -4.0 # in mm
+    fWFpos      = -180
+    bWFpos      = -180
+    
+    trigger_wait = 0.01 # in sec ( if set below 0.015, extra trigger needed to achieve desired frames)
+    
+    detector_gain = 5 # (default: 5)
+
+    settling_time = 0.5   # < 0.2s(local), <0.5(net drive) will be unstable
+    
+    timeout = 3     # epics_put timeout (sec)
+    
+    if ((fOmegaBegin == 0 && fOmegaStop == 0 && sPrefix == 0) || fOmegaStep == 0 || int(fExposureTime*1E5) == 0) {
+		    p ""
+		    p "Usage: TomoScan(fOmegaBegin, fOmegaStop, fOmegaStep, fExposureTime, sFolder, sPrefix, nFrame)"
+		    p "       This will use the motor", motor_mne(sShiftMotor), "for moving out the sample by", fSampleShift, "mm at position", motor_mne(sOmegaMotor), "=", fWFpos,"!!!!"
+		    p "       # of White: ", nWhiteField, ", # of Dark: ", nDarkField, ""
+		    p "       Settling time for Still scan is", settling_time, "sec"
+		    p "       Padding time for IC acquisition is", PADDING, "sec"
+		    p "       Gap time for fastsweep is", DEFAULT_GAP_TIME, "sec"
+		    p ""
+		    exit
+    } else {
+
+    log_to_save = sprintf("StillImage_%s.dat",sFolder)
+    t0 = time()
+    on(log_to_save)
+    
+	p " The scan will use the motor", motor_mne(sShiftMotor), "for moving out the sample by", fSampleShift, "mm at position", motor_mne(sOmegaMotor), "=", fWFpos,"!!"
+	p " # of White: ", nWhiteField, ", # of Dark: ", nDarkField, ""
+	p " Settling time for Still scan is", settling_time, "sec"
+	p " Padding time for IC acquisition is", PADDING, "sec"
+	p " Gap time for fastsweep is", DEFAULT_GAP_TIME, "sec"
+	p " Acquisition log is saved to " log_to_save
+	p ""
+    
+    if (nFrame == 0) {
+        nFrame = 1
+    }
+
+    # set number of Images
+    epics_put("1idPG2:cam1:NumImages",nFrame, timeout)
+
+    # set Image mode
+    epics_put("1idPG2:cam1:ImageMode","Multiple", timeout)
+
+    # set Trigger mode    
+    epics_put("1idPG2:cam1:TriggerMode","Internal", timeout)
+
+    # set exposure time
+    epics_put("1idPG2:cam1:AcquireTime",fExposureTime, timeout)
+
+    # set Acquire Period
+    epics_put("1idPG2:cam1:AcquirePeriod",fExposureTime+0.01, timeout)
+
+    # set Detector Gain (0~30 for Pointgrey)
+    epics_put("1idPG2:cam1:Gain",detector_gain, timeout)
+
+    # turn on/off PROC1 plugin
+    epics_put("1idPG2:Proc1:EnableCallbacks",1,timeout)
+
+    # enable filter
+    epics_put("1idPG2:Proc1:EnableFilter",1,timeout)
+
+    # change number_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:NumFilter",nFrame, timeout)
+
+    # resetnumber_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:ResetFilter",1, timeout)
+
+    # switch port for TIFF plugin
+    epics_put("1idPG2:TIFF1:NDArrayPort","PROC1", timeout)
+
+    # change write mode in TIFF plugin
+    epics_put("1idPG2:TIFF1:FileWriteMode","Stream", timeout)
+
+    # turn on file save in TIFF plugin
+    epics_put("1idPG2:TIFF1:AutoSave","Yes", timeout)
+
+
+    # create folder
+    folder_flag = unix(sprintf("mkdir -p tomo/%s",sFolder))
+
+    # set file path
+    #epics_put("1idPG2:TIFF1:FilePath",sprintf("Z:\\2017-3\\shade_oct17\\tomo\\%s",sFolder))
+    #epics_put("1idPG2:TIFF1:FilePath",sprintf("D:\\musinski_mar18\\tomo\\%s",sFolder))
+    epics_put("1idPG2:TIFF1:FilePath",sprintf("Y:\\2018-3\\%s\\tomo\\%s", EXPID, sFolder), timeout)
+
+    # set file prefix
+    epics_put("1idPG2:TIFF1:FileName",sprintf("%s",sPrefix), timeout)
+
+    # check if folder is created correctly !!  ( check this !! 12/10/2017 by AC)
+    while (epics_get("1idPG2:TIFF1:FilePathExists_RBV") == "No") {
+       p "Folder was created, but MEDM disagree, please check (either folder permission or MEDM timeout)."
+       epics_put("1idPG2:TIFF1:FilePath",sprintf("Y:\\2018-2\\%s\\tomo\\%s", EXPID, sFolder), timeout)
+       sleep(30)
+    }
+
+    while ((epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF") && (testmode ==0)){
+        p "shutter closed ... waiting"
+        SOpen
+        sleep(20)
+    }
+    
+    get_angles; stagestartpos = A[sShiftMotor];
+    
+    p "Stage Start Position: " motor_mne(sShiftMotor) " = " stagestartpos
+    
+    ### front white
+    # set number of captures
+    epics_put("1idPG2:TIFF1:NumCapture",nWhiteField, timeout)
+    # start capture
+    epics_put("1idPG2:TIFF1:Capture","Capture")
+
+    # move out sample and move rotation to WF position
+    get_angles
+    A[sShiftMotor] = stagestartpos+fSampleShift
+    A[sOmegaMotor] = fWFpos
+    move_em
+    waitmove
+
+    #nfileNumber = epics_get("1idPG2:TIFF1:FileNumber")
+    nfileNumber = ccdget_FileNum()
+    
+    cdef("cleanup_once", sprintf("\n TomoScan_cleanup %s %f;", sShiftMotor, stagestartpos), "tomo_fastsweep", "0x20")
+
+#    p "Type: nImage, Date, Time_stamp, time_elapsed, SeqNo, Omega_Position, Omega_Step, xr, yr, zr, ksamx, ksamz, ksamrx, ksamrz, tilt-x"
+    tomo_save_parlabel()
+
+    if (verbose != 0) { printf("WF-1 Start...\n")}
+    for (i = 0; i < nWhiteField; i++) {
+
+        while ((epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF") && (testmode ==0)){
+            p "shutter closed ... waiting"
+            SOpen
+            sleep(60)
+        }
+        
+        tic = time()
+        epics_put("1idPG2:cam1:Acquire", "Acquire", (fExposureTime+0.01)*nFrame + 10)
+        trigger_count = 0
+        if (EPICS_ERR != 0 ) {sleep(0.1)}
+
+        #for (j = 0; j<nFrame; j++) {        
+        #    PGPressSoftTrigger
+        #    sleep(fExposureTime+trigger_wait)
+        #}
+        #sleep(0.05)
+
+        while ( (epics_get("1idPG2:cam1:NumImages_RBV")-epics_get("1idPG2:cam1:NumImagesCounter_RBV")) != 0 ) {
+            sleep(fExposureTime + trigger_wait)
+            trigger_count++
+            if ( (time()-tic) > 30 ) {
+                sendemailalert "Pointgray Acquire timeout"
+                sleep(600)
+            }
+        }
+
+        getcounts
+
+        tomo_save_par(0, "WF_1", i, tic, nfileNumber, fExposureTime, nFrame, trigger_count)
+        nfileNumber++
+    }
+
+    # move in sample
+    get_angles
+    A[sShiftMotor] = stagestartpos
+    move_em
+    waitmove
+    if (verbose != 0) { printf("WF-1 End\n")}
+
+    tic = time()
+    if (verbose != 0) {
+        p "Proj end Capture status", epics_get("1idPG2:TIFF1:Capture_RBV")
+        printf("Projection End\n")
+        }
+    while (epics_get("1idPG2:TIFF1:Capture_RBV") != "Done") {
+        sleep(0.05)
+        }
+    if (verbose != 0) {p "wait", time()-tic, "sec for Proj Capture to finish"}
+
+    ### data
+    nImages = 1 + int( (fOmegaStop - fOmegaBegin + 0.5*fOmegaStep)/fOmegaStep )
+    #p "Number of scan images:", nImages
+
+    # set number of captures
+    epics_put("1idPG2:TIFF1:NumCapture",nImages, timeout)
+    # start capture
+    epics_put("1idPG2:TIFF1:Capture", "Capture")
+    # resetnumber_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:ResetFilter",1, timeout)
+    # get next file number
+    nfileNumber = ccdget_FileNum()
+
+    if (verbose != 0) { printf("Projection Start...\n")}
+    for (i = 0; i < nImages; i++) {
+	    # to wait if beam is down 
+        while ((epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF") && (testmode ==0)){
+            p "shutter closed ... waiting"
+            SOpen
+            sleep(60)
+        }        
+        
+        omega = fOmegaBegin + i*fOmegaStep;
+        get_angles
+        A[sOmegaMotor] = omega
+        move_em
+        waitmove
+
+        tic = time()
+        epics_put("1idPG2:cam1:Acquire", "Acquire", (fExposureTime+0.01)*nFrame + 10)
+        trigger_count = 0
+        if (EPICS_ERR != 0 ) {sleep(0.1)}
+
+        #for (j = 0; j<nFrame; j++) {
+        #    PGPressSoftTrigger
+        #    sleep(fExposureTime + trigger_wait)
+        #}
+        #sleep(0.05)
+                        
+        while ((epics_get("1idPG2:cam1:NumImages_RBV")-epics_get("1idPG2:cam1:NumImagesCounter_RBV")) != 0) {
+        #    PGPressSoftTrigger
+            sleep(fExposureTime + trigger_wait)
+            trigger_count++
+            if ( (time()-tic) > 30 ) {
+                sendemailalert "Pointgray Acquire timeout"
+                sleep(600)
+            }            
+        }
+        
+        getcounts
+
+        tomo_save_par(0, "Proj", i, tic, nfileNumber, fExposureTime, nFrame, trigger_count)        
+        nfileNumber++         
+    }
+    tic = time()
+    if (verbose != 0) {
+        p "Proj end Capture status", epics_get("1idPG2:TIFF1:Capture_RBV")
+        printf("Projection End\n")}
+
+    while (epics_get("1idPG2:TIFF1:Capture_RBV") != "Done") {
+        sleep(0.05)
+    }
+    if (verbose != 0) {p "wait", time()-tic, "sec for Proj Capture to finish"}
+
+    # move out sample & move rotation to WF position
+    get_angles
+    A[sShiftMotor] = stagestartpos+fSampleShift
+    A[sOmegaMotor] = bWFpos
+    move_em
+    waitmove
+    
+    ### back white
+    # set number of captures
+    epics_put("1idPG2:TIFF1:NumCapture",nWhiteField, timeout)
+    # start capture
+    if (verbose != 0) {p "press Capture"}
+    epics_put("1idPG2:TIFF1:Capture", "Capture")
+    # resetnumber_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:ResetFilter",1, timeout)
+    # get next file number
+    nfileNumber = ccdget_FileNum()
+
+    if (verbose != 0) { printf("WF-2 Start...\n")}
+    for (i = 0; i < nWhiteField; i++) {
+        # to wait if beam is down
+        while ((epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF") && (testmode ==0)){
+            p "shutter closed ... waiting"
+            SOpen
+            sleep(60)
+        }
+        
+        tic = time()
+        epics_put("1idPG2:cam1:Acquire", "Acquire", (fExposureTime+0.01)*nFrame + 10)
+        trigger_count = 0
+        if (EPICS_ERR != 0 ) {sleep(0.1)}
+
+        #for (j = 0; j<nFrame; j++) {        
+        #    PGPressSoftTrigger
+        #    sleep(fExposureTime+trigger_wait)
+        #}
+        #sleep(0.02)
+
+        while ( (epics_get("1idPG2:cam1:NumImages_RBV")-epics_get("1idPG2:cam1:NumImagesCounter_RBV")) != 0 ) {
+            #PGPressSoftTrigger
+            sleep(fExposureTime + trigger_wait)
+            trigger_count++
+        }
+
+        getcounts
+
+        tomo_save_par(0, "WF_2", i, tic, nfileNumber, fExposureTime, nFrame, trigger_count)        
+        #nfileNumber = epics_get("1idPG2:TIFF1:FileNumber")
+        nfileNumber++
+    }	
+    # move in sample 
+    get_angles
+    A[sShiftMotor] = stagestartpos
+    move_em
+    waitmove
+    if (verbose != 0) { printf("WF-2 End\n")}
+
+    # close shutter
+    SClose 3 1
+    
+    ### dark field
+    # set number of captures
+    epics_put("1idPG2:TIFF1:NumCapture",nDarkField, timeout)
+    # start capture
+    epics_put("1idPG2:TIFF1:Capture", "Capture")
+    # resetnumber_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:ResetFilter",1, timeout)
+    # get next file number
+    nfileNumber = ccdget_FileNum()
+
+    if (verbose != 0) { printf("Dark Start...\n")}
+    for (i = 0; i < nDarkField; i++) {
+
+        tic = time()
+        epics_put("1idPG2:cam1:Acquire", "Acquire", (fExposureTime+0.01)*nFrame + 10)
+        trigger_count = 0
+        if (EPICS_ERR != 0 ) {sleep(0.1)}
+
+        #for (j = 0; j<nFrame; j++) {      #  
+        #    PGPressSoftTrigger                #
+        #    sleep(fExposureTime+trigger_wait)         #
+        #}
+           
+        while ((epics_get("1idPG2:cam1:NumImages_RBV")-epics_get("1idPG2:cam1:NumImagesCounter_RBV")) != 0) {
+            PGPressSoftTrigger
+            sleep(fExposureTime + trigger_wait)
+            trigger_count++
+        }
+        
+        getcounts
+        
+        tomo_save_par(0, "Dark", i, tic, nfileNumber, fExposureTime, nFrame, trigger_count)        
+        nfileNumber++
+    }
+    if (verbose != 0) { printf("Dark End\n")}
+    
+    # move back to fOmegaBegin
+    get_angles
+    A[sOmegaMotor] = fOmegaBegin
+    move_em
+    waitmove
+    
+    #switch back to normal mode			
+    ccd_initialize
+
+    t1 = time()-t0
+    }
+    p "Stage Final Position: " motor_mne(sShiftMotor) " = " A[sShiftMotor]
+    p "Total time elaspsed: " sprintf("%.2f",t1/60) " min"
+    off(log_to_save)
+}'  # TomoScan6_main
+
+
+def TomoFlyScan6(fOmegaBegin, fOmegaStop, fOmegaStep, fOmegaSpeed, fExposureTime, sFolder, sPrefix) '{
+
+    local omega nWhiteField nDarkField i nImages settling_time nfileNumber fSampleShift fWFpos
+    local stagestartpos sShiftMotor t0 t1 tic tiltx detector_gain trigger_count trigger_wait capture_count
+    local verbose timeout folder_flag
+
+    verbose = 1      # for debug
+
+    nWhiteField = 10
+    nDarkField  = 10
+
+    sShiftMotor = ksamx
+    sOmegaMotor = preci      # must be "preci" for 6BM-A
+    fSampleShift= -5         # in mm
+    fWFpos      = -180
+    bWFpos      = -180
+    
+    #trigger_wait = 0.01 # in sec ( if set below 0.015, extra trigger needed to achieve desired frames)
+    
+    detector_gain = 5 # (default: 5)
+
+    #settling_time = 0.5   # < 0.2s(local), <0.5(net drive) will be unstable
+    
+    timeout = 3     # epics_put timeout (sec)
+    
+    if ((fOmegaBegin == 0 && fOmegaStop == 0 && sPrefix == 0) || fOmegaStep == 0 || int(fExposureTime*1E5) == 0) {
+		    p ""
+		    p "Usage: TomoFlyScan6(fOmegaBegin, fOmegaStop, fOmegaStep, fOmegaSpeed, fExposureTime, sFolder, sPrefix)"
+		    p "       This will use the motor", motor_mne(sShiftMotor), "for moving out the sample by", fSampleShift, "mm at position", motor_mne(sOmegaMotor), "=", fWFpos,"!!!!"
+		    p "       # of White: ", nWhiteField, ", # of Dark: ", nDarkField, ""
+		    #p "       Settling time for Still scan is", settling_time, "sec"
+		    #p "       Padding time for IC acquisition is", PADDING, "sec"
+		    #p "       Gap time for fastsweep is", DEFAULT_GAP_TIME, "sec"
+		    p ""
+		    exit
+    } else {
+
+    log_to_save = sprintf("SweepImage_%s.dat",sFolder)
+    t0 = time()
+    on(log_to_save)
+    
+	p " The scan will use the motor", motor_mne(sShiftMotor), "for moving out the sample by", fSampleShift, "mm at position", motor_mne(sOmegaMotor), "=", fWFpos,"!!"
+	p " # of White: ", nWhiteField, ", # of Dark: ", nDarkField, ""
+	#p " Settling time for Still scan is", settling_time, "sec"
+	#p " Padding time for IC acquisition is", PADDING, "sec"
+	#p " Gap time for fastsweep is", DEFAULT_GAP_TIME, "sec"
+	p " Acquisition log is saved to " log_to_save
+	p ""
+    
+    # set number of Images
+    epics_put("1idPG2:cam1:NumImages",nFrame, timeout)
+
+    # set Image mode
+    epics_put("1idPG2:cam1:ImageMode","Multiple", timeout)
+
+    # set Trigger mode    
+    epics_put("1idPG2:cam1:TriggerMode","Internal", timeout)
+
+    # set exposure time
+    epics_put("1idPG2:cam1:AcquireTime",fExposureTime, timeout)
+
+    # set Acquire Period
+    epics_put("1idPG2:cam1:AcquirePeriod",fExposureTime+0.01, timeout)
+
+    # set Detector Gain (0~30 for Pointgrey)
+    epics_put("1idPG2:cam1:Gain",detector_gain, timeout)
+
+    # turn on/off PROC1 plugin
+
+    epics_put("1idPG2:Proc1:EnableCallbacks",1,timeout)
+
+    # enable filter
+    epics_put("1idPG2:Proc1:EnableFilter",1,timeout)
+
+    # change number_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:NumFilter",nFrame, timeout)
+
+    # resetnumber_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:ResetFilter",1, timeout)
+
+    # switch port for TIFF plugin
+    epics_put("1idPG2:TIFF1:NDArrayPort","PROC1", timeout)
+
+    # change write mode in TIFF plugin
+    epics_put("1idPG2:TIFF1:FileWriteMode","Stream", timeout)
+
+    # turn on file save in TIFF plugin
+    epics_put("1idPG2:TIFF1:AutoSave","Yes", timeout)
+
+
+    # create folder
+    folder_flag = unix(sprintf("mkdir -p tomo/%s",sFolder))
+
+    # set file path
+    #epics_put("1idPG2:TIFF1:FilePath",sprintf("Z:\\2017-3\\shade_oct17\\tomo\\%s",sFolder))
+    #epics_put("1idPG2:TIFF1:FilePath",sprintf("D:\\musinski_mar18\\tomo\\%s",sFolder))
+    epics_put("1idPG2:TIFF1:FilePath",sprintf("Y:\\2018-2\\%s\\tomo\\%s", EXPID, sFolder), timeout)
+
+    # set file prefix
+    epics_put("1idPG2:TIFF1:FileName",sprintf("%s",sPrefix), timeout)
+
+    # check if folder is created correctly !!  ( check this !! 12/10/2017 by AC)
+    while (epics_get("1idPG2:TIFF1:FilePathExists_RBV") == "No") {
+       p "Folder was created, but MEDM disagree, please check (either folder permission or MEDM timeout)."
+       epics_put("1idPG2:TIFF1:FilePath",sprintf("Y:\\2018-2\\%s\\tomo\\%s", EXPID, sFolder), timeout)
+       sleep(30)
+    }
+
+    while ((epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF") && (testmode ==0)){
+        p "shutter closed ... waiting"
+        SOpen
+        sleep(20)
+    }
+    
+    get_angles; stagestartpos = A[sShiftMotor];
+    
+    p "Stage Start Position: " motor_mne(sShiftMotor) " = " stagestartpos
+    
+    ### front white
+    # set number of captures
+    epics_put("1idPG2:TIFF1:NumCapture",nWhiteField, timeout)
+    # start capture
+    epics_put("1idPG2:TIFF1:Capture","Capture")
+
+    # move out sample and move rotation to WF position
+    get_angles
+    A[sShiftMotor] = stagestartpos+fSampleShift
+    A[sOmegaMotor] = fWFpos
+    move_em
+    waitmove
+
+    #nfileNumber = epics_get("1idPG2:TIFF1:FileNumber")
+    nfileNumber = ccdget_FileNum()
+    
+    cdef("cleanup_once", sprintf("\n TomoScan_cleanup %s %f;", sShiftMotor, stagestartpos), "tomo_fastsweep", "0x20")
+
+#    p "Type: nImage, Date, Time_stamp, time_elapsed, SeqNo, Omega_Position, Omega_Step, xr, yr, zr, ksamx, ksamz, ksamrx, ksamrz, tilt-x"
+    tomo_save_parlabel()
+
+    if (verbose != 0) { printf("WF-1 Start...\n")}
+    for (i = 0; i < nWhiteField; i++) {
+
+        while ((epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF") && (testmode ==0)){
+            p "shutter closed ... waiting"
+            SOpen
+            sleep(60)
+        }
+        
+        tic = time()
+        epics_put("1idPG2:cam1:Acquire", "Acquire", (fExposureTime+0.01)*nFrame + 10)
+        trigger_count = 0
+        if (EPICS_ERR != 0 ) {sleep(0.1)}
+
+        #for (j = 0; j<nFrame; j++) {        
+        #    PGPressSoftTrigger
+        #    sleep(fExposureTime+trigger_wait)
+        #}
+        #sleep(0.05)
+
+        while ( (epics_get("1idPG2:cam1:NumImages_RBV")-epics_get("1idPG2:cam1:NumImagesCounter_RBV")) != 0 ) {
+            sleep(fExposureTime + trigger_wait)
+            trigger_count++
+            if ( (time()-tic) > 30 ) {
+                sendemailalert "Pointgray Acquire timeout"
+                sleep(600)
+
+            }
+        }
+
+        getcounts
+
+        tomo_save_par(0, "WF_1", i, tic, nfileNumber, fExposureTime, nFrame, trigger_count)
+        nfileNumber++
+    }
+
+    # move in sample
+    get_angles
+    A[sShiftMotor] = stagestartpos
+    move_em
+    waitmove
+    if (verbose != 0) { printf("WF-1 End\n")}
+
+    tic = time()
+    if (verbose != 0) {
+        p "Proj end Capture status", epics_get("1idPG2:TIFF1:Capture_RBV")
+        printf("Projection End\n")
+        }
+    while (epics_get("1idPG2:TIFF1:Capture_RBV") != "Done") {
+        sleep(0.05)
+        }
+    if (verbose != 0) {p "wait", time()-tic, "sec for Proj Capture to finish"}
+
+    ### data
+    nImages = 1 + int( (fOmegaStop - fOmegaBegin + 0.5*fOmegaStep)/fOmegaStep )
+    #p "Number of scan images:", nImages
+
+    # set number of captures
+    epics_put("1idPG2:TIFF1:NumCapture",nImages, timeout)
+    # start capture
+    epics_put("1idPG2:TIFF1:Capture", "Capture")
+    # resetnumber_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:ResetFilter",1, timeout)
+    # get next file number
+    nfileNumber = ccdget_FileNum()
+
+    if (verbose != 0) { printf("Projection Start...\n")}
+    for (i = 0; i < nImages; i++) {
+	    # to wait if beam is down 
+        while ((epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF") && (testmode ==0)){
+            p "shutter closed ... waiting"
+            SOpen
+            sleep(60)
+        }        
+        
+        omega = fOmegaBegin + i*fOmegaStep;
+        get_angles
+        A[sOmegaMotor] = omega
+        move_em
+        waitmove
+
+        tic = time()
+        epics_put("1idPG2:cam1:Acquire", "Acquire", (fExposureTime+0.01)*nFrame + 10)
+        trigger_count = 0
+        if (EPICS_ERR != 0 ) {sleep(0.1)}
+
+        #for (j = 0; j<nFrame; j++) {
+        #    PGPressSoftTrigger
+        #    sleep(fExposureTime + trigger_wait)
+        #}
+        #sleep(0.05)
+                        
+        while ((epics_get("1idPG2:cam1:NumImages_RBV")-epics_get("1idPG2:cam1:NumImagesCounter_RBV")) != 0) {
+        #    PGPressSoftTrigger
+            sleep(fExposureTime + trigger_wait)
+            trigger_count++
+            if ( (time()-tic) > 30 ) {
+                sendemailalert "Pointgray Acquire timeout"
+                sleep(600)
+            }            
+        }
+        
+        getcounts
+
+        tomo_save_par(0, "Proj", i, tic, nfileNumber, fExposureTime, nFrame, trigger_count)        
+        nfileNumber++         
+    }
+    tic = time()
+    if (verbose != 0) {
+        p "Proj end Capture status", epics_get("1idPG2:TIFF1:Capture_RBV")
+        printf("Projection End\n")}
+
+    while (epics_get("1idPG2:TIFF1:Capture_RBV") != "Done") {
+        sleep(0.05)
+    }
+    if (verbose != 0) {p "wait", time()-tic, "sec for Proj Capture to finish"}
+
+    # move out sample & move rotation to WF position
+    get_angles
+    A[sShiftMotor] = stagestartpos+fSampleShift
+    A[sOmegaMotor] = bWFpos
+    move_em
+    waitmove
+    
+    ### back white
+    # set number of captures
+    epics_put("1idPG2:TIFF1:NumCapture",nWhiteField, timeout)
+    # start capture
+    if (verbose != 0) {p "press Capture"}
+    epics_put("1idPG2:TIFF1:Capture", "Capture")
+    # resetnumber_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:ResetFilter",1, timeout)
+    # get next file number
+    nfileNumber = ccdget_FileNum()
+
+    if (verbose != 0) { printf("WF-2 Start...\n")}
+    for (i = 0; i < nWhiteField; i++) {
+        # to wait if beam is down
+        while ((epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF") && (testmode ==0)){
+            p "shutter closed ... waiting"
+            SOpen
+            sleep(60)
+        }
+        
+        tic = time()
+        epics_put("1idPG2:cam1:Acquire", "Acquire", (fExposureTime+0.01)*nFrame + 10)
+        trigger_count = 0
+        if (EPICS_ERR != 0 ) {sleep(0.1)}
+
+        #for (j = 0; j<nFrame; j++) {        
+        #    PGPressSoftTrigger
+        #    sleep(fExposureTime+trigger_wait)
+        #}
+        #sleep(0.02)
+
+        while ( (epics_get("1idPG2:cam1:NumImages_RBV")-epics_get("1idPG2:cam1:NumImagesCounter_RBV")) != 0 ) {
+            #PGPressSoftTrigger
+            sleep(fExposureTime + trigger_wait)
+            trigger_count++
+        }
+
+        getcounts
+
+        tomo_save_par(0, "WF_2", i, tic, nfileNumber, fExposureTime, nFrame, trigger_count)        
+        #nfileNumber = epics_get("1idPG2:TIFF1:FileNumber")
+        nfileNumber++
+    }	
+    # move in sample 
+    get_angles
+    A[sShiftMotor] = stagestartpos
+    move_em
+    waitmove
+    if (verbose != 0) { printf("WF-2 End\n")}
+
+    # close shutter
+    SClose 3 1
+    
+    ### dark field
+    # set number of captures
+    epics_put("1idPG2:TIFF1:NumCapture",nDarkField, timeout)
+    # start capture
+    epics_put("1idPG2:TIFF1:Capture", "Capture")
+    # resetnumber_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:ResetFilter",1, timeout)
+    # get next file number
+    nfileNumber = ccdget_FileNum()
+
+    if (verbose != 0) { printf("Dark Start...\n")}
+    for (i = 0; i < nDarkField; i++) {
+
+        tic = time()
+        epics_put("1idPG2:cam1:Acquire", "Acquire", (fExposureTime+0.01)*nFrame + 10)
+        trigger_count = 0
+        if (EPICS_ERR != 0 ) {sleep(0.1)}
+
+        #for (j = 0; j<nFrame; j++) {      #  
+        #    PGPressSoftTrigger                #
+        #    sleep(fExposureTime+trigger_wait)         #
+        #}
+           
+        while ((epics_get("1idPG2:cam1:NumImages_RBV")-epics_get("1idPG2:cam1:NumImagesCounter_RBV")) != 0) {
+            PGPressSoftTrigger
+            sleep(fExposureTime + trigger_wait)
+            trigger_count++
+        }
+        
+        getcounts
+        
+        tomo_save_par(0, "Dark", i, tic, nfileNumber, fExposureTime, nFrame, trigger_count)        
+        nfileNumber++
+    }
+    if (verbose != 0) { printf("Dark End\n")}
+    
+    # move back to fOmegaBegin
+    get_angles
+    A[sOmegaMotor] = fOmegaBegin
+    move_em
+    waitmove
+    
+    #switch back to normal mode			
+    ccd_initialize
+
+    t1 = time()-t0
+    }
+    p "Stage Final Position: " motor_mne(sShiftMotor) " = " A[sShiftMotor]
+    p "Total time elaspsed: " sprintf("%.2f",t1/60) " min"
+    off(log_to_save)
+}'  # TomoFlyScan6_main
+
+
+
+def TomoScan_cleanup '{
+    # This is running when you Ctrl+C the scan
+    p "TomoScan_cleanup is started"
+
+    # Ugly ALL_STOP
+    p "Stopping all the motors"
+    epics_put("6bma1:allstop.VAL", 1)
+
+    # TODO: It cannot see the sOmegMotor and sShiftMotor variables from the function 
+    sleep(0.1)
+    
+    p "Reset Tomo camera..."
+    ccd_initialize
+
+    p "Move stage motor " motor_mne($1) " back to " $2
+    get_angles
+    A[$1] = $2
+    move_em
+    waitmove
+}'
+
+
+def TomoVolScan6(bScanType, fOmegaBegin, fOmegaStop, fOmegaStep, fExposureTime, sFolder, sPrefix, nframe, stagestep, nstage, nsamY, samYstep) '{
+    local omega isamY samYmotor
+    local istage tic t1
+    local startstage stagemotor startsamY
+    
+    tic = time()
+    
+    ################### THIS SHOULD BE REVISED
+    stagemotor=ksamx
+    samYmotor=yr    
+    ###################
+    get_angles
+    p "Original position: ", motor_mne(stagemotor), "=", A[stagemotor]
+	if (bScanType == 0 || (fOmegaBegin == 0 && fOmegaStop == 0 && sPrefix == 0)) {
+		p ""
+		p "Usage: TomoVolScan_Aero(bScanType, fOmegaBegin, fOmegaStop, fOmegaStep, fExposureTime, sFolder, sPrefix, nframe, stagestep, nstage, nsamY, samYstep)"
+		p "       bScanType: Still Images, if 1; Sweeped Images, if 2."
+    	p "       nframe: number of images per step for image accumulation for still scan."
+		p "       Check TomoScan for that which stage is used for moving out the sample!!!!"
+		p "       It assumes that the stage is at the center at the beginning!!!"
+		p "       Rotation axis motion:", motor_mne(stagemotor), " volume motor:", motor_mne(samYmotor)
+		p ""
+	} else {
+		p "       Number of images per step for image accumulation for still scan: " nframe
+        get_angles
+        p A[stagemotor], A[ksamx], A[ksamz], A[samYmotor], A[preci]
+        ## This may be commented out
+        #A[stagemotor]=0.0  # Supposing that this is the centered position
+        #move_em; waitmove; get_angles; p "Reset position to original: ", motor_mne(stagemotor), "=", A[stagemotor]
+        
+        get_angles
+        startstage=A[stagemotor]
+        startsamY=A[samYmotor]
+        
+        p stagestep, nstage, nsamY, samYstep
+
+        
+        A[stagemotor]= startstage-((nstage-1)/2)*stagestep
+        move_em; waitmove; get_angles; p "Stitching starting position: ", motor_mne(stagemotor), "=", A[stagemotor]
+        p "Current volume position: ", motor_mne(samYmotor), "=", A[samYmotor]
+           
+        for (isamY = 0; isamY < nsamY; isamY++) {
+  
+            for (istage = 0; istage < nstage; istage++) {
+                p A[stagemotor], A[ksamx], A[ksamz], A[samYmotor], A[preci]
+
+                TomoScan6(fOmegaBegin, fOmegaStop, fOmegaStep, fExposureTime, sFolder, sPrefix, nframe)
+                
+                p "=========== DOING TOMO"
+                
+                p "stagemotor_old: ", motor_mne(stagemotor), "=", A[stagemotor]
+                A[stagemotor]= A[stagemotor]+ stagestep
+                move_em; waitmove; get_angles; p "Current stitching position: ", motor_mne(stagemotor), "=", A[stagemotor]
+                p "stagemotor_new: ", motor_mne(stagemotor), "=", A[stagemotor]
+            } 
+            A[stagemotor]= A[stagemotor]-nstage*stagestep 
+            move_em; waitmove; get_angles; p "Go back to start position: ", motor_mne(stagemotor), "=", A[stagemotor]
+            move_em; waitmove; get_angles; p "Previous layer position: ", motor_mne(samYmotor), "=", A[samYmotor]
+            # Do not move samYmotor if this is the last Y position to measure
+            if (isamY+1 < nsamY) {
+                A[samYmotor]= A[samYmotor]+ samYstep
+                move_em; waitmove; get_angles; p "Current layer position: ", motor_mne(samYmotor), "=", A[samYmotor]
+            }
+        }
+        A[samYmotor]=startsamY; waitmove
+        move_em; waitmove; get_angles; p "Go back to original position: ", motor_mne(samYmotor), "=", A[samYmotor]
+        A[stagemotor]= startstage 
+        move_em; waitmove; get_angles; p "Go back to original position: ", motor_mne(stagemotor), "=", A[stagemotor]
+    }
+    t1 = time() - tic
+    p "Total volume: ", nsamY, "total time elaspsed: " sprintf("%.2f",t1/60) " min"
+}'
+
+def cont_acq '{
+    local exp_time exp_period
+    
+    exp_time   = $1
+    exp_period = $2
+    
+    if (exp_time > 0.5) {
+        exp_time = 0.01
+    }
+        
+    if (exp_time+0.01 >= exp_period) {
+        exp_period = exp_time+0.01
+    }
+    # initialize detector
+    ccd_initialize
+    
+    # setup exposure time
+    epics_put("1idPG2:cam1:AcquireTime",exp_time,0)
+    # setup exposure period
+    epics_put("1idPG2:cam1:AcquirePeriod",exp_period,0)
+    # setup image mode
+    epics_put("1idPG2:cam1:ImageMode","Continuous")
+    # start acquisition
+    epics_put("1idPG2:cam1:Acquire",1)  
+}'
+
+def stop_cont_acq '{
+    # setup image mode
+    epics_put("1idPG2:cam1:ImageMode","Single")
+
+    # stop acquisition
+    epics_put("1idPG2:cam1:Acquire",0)  
+}'
+
+def take_img '{
+
+    local exp_time nImage nFrame filepath turnoffinfo timeout
+    
+    timeout = 5 
+    
+    exp_time    = $1
+    nImage      = $2
+    nFrame      = $3
+    turnoffinfo = $4
+    
+    if (exp_time == 0 && nImage == 0) {
+        p ""
+        p "Usage: take_img [exp_time] [nImage] [nFrame]"
+        p "    exp_time: exposure time (sec) ( limit: 0 < time < 0.5 sec) "
+        p "      nImage: number of images to save"
+        p "      nFrame: number of frames averaged per image"
+#        p "      period: time per saved image (sec)"
+        p ""
+        return    
+    } 
+
+    filepath = epics_get("1idPG2:TIFF1:FilePath","string")
+
+    if (turnoffinfo == 0) {
+        p "Save Still Image(s) to " filepath
+        p "Number of images: " nImage
+        p "   exposure time: " exp_time "sec"
+    }
+    ##### initiallize camera
+    # set number of Images
+    epics_put("1idPG2:cam1:NumImages",nImage*nFrame, timeout)
+    # set Image mode
+    epics_put("1idPG2:cam1:ImageMode","Multiple", timeout)
+    # turn off "Frame rate enable"
+    #epics_put("1idPG2:cam1:FrameRateOnOff",0,0)
+    # set exposure time
+    epics_put("1idPG2:cam1:AcquireTime",exp_time, timeout)
+    # set Acquire Period
+    epics_put("1idPG2:cam1:AcquirePeriod",exp_time+0.01, timeout)
+    # set Frame Rate
+    #epics_put("1idPG2:cam1:FrameRateValAbs",10,0)
+    # turn on/off PROC1 plugin
+    epics_put("1idPG2:Proc1:EnableCallbacks",1, timeout)
+    # enable filter
+    epics_put("1idPG2:Proc1:EnableFilter",1, timeout)
+    # change number_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:NumFilter",nFrame, timeout)
+    # resetnumber_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:ResetFilter",1, timeout)
+    # switch port for TIFF plugin
+    epics_put("1idPG2:TIFF1:NDArrayPort","PROC1", timeout)
+    # change write mode in TIFF plugin
+    epics_put("1idPG2:TIFF1:FileWriteMode","Stream", timeout)
+    # turn on file save in TIFF plugin
+    #epics_put("1idPG2:TIFF1:AutoSave","Yes")    
+
+    ##### take still image
+    # set number of captures
+    epics_put("1idPG2:TIFF1:NumCapture",nImage, timeout)
+    # start capture
+    epics_put("1idPG2:TIFF1:Capture", "Capture")
+    epics_put("1idPG2:cam1:Acquire", "Acquire", (exp_time+0.01)*nFrame*nImage + timeout)
+   
+    ##### wait until the process is done.
+    #sleep((exp_time+0.01)*nFrame*nImage)
+    
+    # start time step
+    tic = time()
+
+    #while (epics_get("1idPG2:cam1:Acquire")!="Done") {
+    while (epics_get("1idPG2:TIFF1:WriteFile_RBV")!="Done" || epics_get("1idPG2:cam1:Acquire")!="Done") {
+        #p "image capture should finish by now!! but it is not.."
+        sleep(0.5)
+        time_elapsed = time()-tic
+        if (time_elapsed > 30) {
+            p "Detector status is " epics_get("1idPG2:cam1:DetectorState_RBV") " for " time_elapsed "sec, ERROR!!"
+            epics_put("1idPG2:cam1:Acquire",0)
+            sleep(0.5)
+            epics_put("1idPG2:cam1:Acquire",1)
+            sleep(0.5)
+        }
+    }
+    
+    ##### switch back to normal mode
+    ccd_initialize		
+    # turn on/off PROC1 plugin
+    #epics_put("1idPG2:Proc1:EnableCallbacks",0,0)
+    # switch port for TIFF plugin
+    #epics_put("1idPG2:TIFF1:NDArrayPort","PG1")
+    # switch back Image mode
+    #epics_put("1idPG2:cam1:ImageMode","Continuous")
+    # change write mode in TIFF plugin
+    #epics_put("1idPG2:TIFF1:FileWriteMode","Single")
+    # turn on file save in TIFF plugin
+    #epics_put("1idPG2:TIFF1:AutoSave","No")
+    # turn on "Frame rate enable"
+    #epics_put("1idPG2:cam1:FrameRateOnOff",1,0)        
+
+}'
+
+def tomo_save_par(log_to_save, label, ind, tic, nfileNumber, exp_time, nframe, trigger_count, verbose) '{
+
+    if (label == 0) {
+        p "Please specify the label!!"
+        exit
+    }
+
+    if ( verbose != 0 ) {p sprintf("Print motor records to %s", log_to_save)}
+    
+    if (log_to_save != 0) {on(log_to_save)}
+    printf("%s: %4d, %22s, %10.4f, %6d, %2.3f, %3d, %3.2f, %3.3f, %3.3f, %3.3f, %3.4f, %3.4f, %3.4f, %3.4f, %3.4f, %3.4f, %3.1f, %3d, %.6f\n",\
+            label, ind+1, date("%m-%d-%Y %T.%.2"), time()-tic, nfileNumber, exp_time, nframe,\
+            A[preci], A[xr], A[yr], A[zr], A[ksamx], A[ksamz], A[ksamrx], A[ksamrz], epics_get("6bma1:USdig_T7:1:Angle"),\
+            epics_get("6bma1:m33.VAL"), epics_get("6bma1:D1Dmm_calc.VAL"), trigger_count, time())
+    if (log_to_save != 0) {off(log_to_save)}
+
+}'
+
+def tomo_save_parlabel(log_to_save) '{
+
+    if (log_to_save != 0) {on(log_to_save)}
+    printf("Type: nImg, Date, time_elapsed, SeqNum, exp_time, nframe, Omega_Position, xr, yr, zr, ksamx, ksamz, ksamrx, ksamrz, tilt-x, displacement, force, num_trigger, time_stamp\n")
+    if (log_to_save != 0) {off(log_to_save)}
+}'
+
+
+
+def TomoScan6(fOmegaBegin, fOmegaStop, fOmegaStep, fExposureTime, sFolder, sPrefix, nFrame) '{
+    # loop over nframe, use PGSoftTrigger to trigger exposure 
+    #
+    local omega nWhiteField nDarkField i nImages settling_time nfileNumber fSampleShift fWFpos
+    local stagestartpos sShiftMotor t0 t1 tic tiltx detector_gain trigger_count trigger_wait capture_count
+    local verbose timeout folder_flag
+
+    verbose = 0      # for debug
+
+    nWhiteField = 10
+    nDarkField  = 10
+
+    sShiftMotor = ksamx
+    sOmegaMotor = preci
+    fSampleShift= 5  # in mm
+    fWFpos      = -180
+    bWFpos      = -180
+    
+    trigger_wait = 0.03 # in sec ( if set below 0.015, extra trigger needed to achieve desired frames)
+    
+    detector_gain = 5 # (default: 5)
+
+    settling_time = 0.5   # < 0.2s(local), <0.5(net drive) will be unstable
+    
+    timeout = 3     # epics_put timeout (sec)
+    
+    if ((fOmegaBegin == 0 && fOmegaStop == 0 && sPrefix == 0) || fOmegaStep == 0 || int(fExposureTime*1E5) == 0) {
+		    p ""
+		    p "Usage: TomoScan(fOmegaBegin, fOmegaStop, fOmegaStep, fExposureTime, sFolder, sPrefix, nFrame)"
+		    p "       This will use the motor", motor_mne(sShiftMotor), "for moving out the sample by", fSampleShift, "mm at position", motor_mne(sOmegaMotor), "=", fWFpos,"!!!!"
+		    p "       # of White: ", nWhiteField, ", # of Dark: ", nDarkField, ""
+		    p "       Settling time for Still scan is", settling_time, "sec"
+		    p "       Padding time for IC acquisition is", PADDING, "sec"
+		    p "       Gap time for fastsweep is", DEFAULT_GAP_TIME, "sec"
+		    p ""
+		    exit
+    } else {
+
+    log_to_save = sprintf("StillImage_%s.dat",sFolder)
+    t0 = time()
+    on(log_to_save)
+    
+	p " The scan will use the motor", motor_mne(sShiftMotor), "for moving out the sample by", fSampleShift, "mm at position", motor_mne(sOmegaMotor), "=", fWFpos,"!!"
+	p " # of White: ", nWhiteField, ", # of Dark: ", nDarkField, ""
+	p " Settling time for Still scan is", settling_time, "sec"
+	p " Padding time for IC acquisition is", PADDING, "sec"
+	p " Gap time for fastsweep is", DEFAULT_GAP_TIME, "sec"
+	p " Acquisition log is saved to " log_to_save
+	p ""
+    
+    if (nFrame == 0) {
+        nFrame = 1
+    }
+
+    # set number of Images
+    epics_put("1idPG2:cam1:NumImages",nFrame, timeout)
+
+    # set Image mode
+    epics_put("1idPG2:cam1:ImageMode","Multiple", timeout)
+
+    # set Trigger mode    
+    epics_put("1idPG2:cam1:TriggerMode","Ext. Standard", timeout)
+
+    # set exposure time
+    epics_put("1idPG2:cam1:AcquireTime",fExposureTime, timeout)
+
+    # set Acquire Period
+    epics_put("1idPG2:cam1:AcquirePeriod",fExposureTime+0.01, timeout)
+
+    # set Detector Gain (0~30 for Pointgrey)
+    epics_put("1idPG2:cam1:Gain",detector_gain, timeout)
+
+    # turn on/off PROC1 plugin
+    epics_put("1idPG2:Proc1:EnableCallbacks",1,timeout)
+
+    # enable filter
+    epics_put("1idPG2:Proc1:EnableFilter",1,timeout)
+
+    # change number_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:NumFilter",nFrame, timeout)
+
+    # resetnumber_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:ResetFilter",1, timeout)
+
+    # switch port for TIFF plugin
+    epics_put("1idPG2:TIFF1:NDArrayPort","PROC1", timeout)
+
+    # change write mode in TIFF plugin
+    epics_put("1idPG2:TIFF1:FileWriteMode","Stream", timeout)
+
+    # turn on file save in TIFF plugin
+    epics_put("1idPG2:TIFF1:AutoSave","Yes", timeout)
+
+
+    # create folder
+    folder_flag = unix(sprintf("mkdir -p tomo/%s",sFolder))
+
+    # set file path
+    #epics_put("1idPG2:TIFF1:FilePath",sprintf("Z:\\2017-3\\shade_oct17\\tomo\\%s",sFolder))
+    #epics_put("1idPG2:TIFF1:FilePath",sprintf("D:\\musinski_mar18\\tomo\\%s",sFolder))
+    epics_put("1idPG2:TIFF1:FilePath",sprintf("Y:\\2018-2\\%s\\tomo\\%s", EXPID, sFolder), timeout)
+
+
+    # set file prefix
+    epics_put("1idPG2:TIFF1:FileName",sprintf("%s",sPrefix), timeout)
+
+    # check if folder is created correctly !!  ( check this !! 12/10/2017 by AC)
+    while (epics_get("1idPG2:TIFF1:FilePathExists_RBV") == "No") {
+       p "Folder was created, but MEDM disagree, please check (either folder permission or MEDM timeout)."
+       epics_put("1idPG2:TIFF1:FilePath",sprintf("Y:\\2018-2\\%s\\tomo\\%s", EXPID, sFolder), timeout)
+       sleep(30)
+    }
+
+    while ((epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF") && (testmode ==0)){
+        p "shutter closed ... waiting"
+        SOpen
+        sleep(60)
+    }
+    
+    get_angles; stagestartpos = A[sShiftMotor];
+    
+    p "Stage Start Position: " motor_mne(sShiftMotor) " = " stagestartpos
+    
+    ### front white
+    # set number of captures
+    epics_put("1idPG2:TIFF1:NumCapture",nWhiteField, timeout)
+    # start capture
+    epics_put("1idPG2:TIFF1:Capture","Capture")
+
+    # move out sample and move rotation to WF position
+    get_angles
+    A[sShiftMotor] = stagestartpos+fSampleShift
+    A[sOmegaMotor] = fWFpos
+    move_em
+    waitmove
+
+    #nfileNumber = epics_get("1idPG2:TIFF1:FileNumber")
+    nfileNumber = ccdget_FileNum()
+    
+    cdef("cleanup_once", sprintf("\n TomoScan_cleanup %s %f;", sShiftMotor, stagestartpos), "tomo_fastsweep", "0x20")
+
+#    p "Type: nImage, Date, SeqNo, Omega_Position, Omega_Step, xr, yr, zr"
+#    p "Type: nImage, Date, Time_stamp, SeqNo, Omega_Position, Omega_Step, xr, yr, zr, ksamx, ksamz, ksamrx, ksamrz, tilt-x"
+#    p "Type: nImage, Date, Time_stamp, time_elapsed, SeqNo, Omega_Position, Omega_Step, xr, yr, zr, ksamx, ksamz, ksamrx, ksamrz, tilt-x"
+    tomo_save_parlabel()
+
+    if (verbose != 0) { printf("WF-1 Start...\n")}
+    for (i = 0; i < nWhiteField; i++) {
+
+        #nfileNumber = epics_get("1idPG2:TIFF1:FileNumber") - 1
+        #nfileNumber = ccdget_FileNum() - 1
+                
+        while ((epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF") && (testmode ==0)){
+            p "shutter closed ... waiting"
+            SOpen
+            sleep(60)
+        }
+        
+        tic = time()
+        epics_put("1idPG2:cam1:Acquire", "Acquire")
+        trigger_count = 0
+        sleep(0.1)
+
+        for (j = 0; j<nFrame; j++) {        
+            PGPressSoftTrigger
+            sleep(fExposureTime+trigger_wait)
+        }
+        #sleep(0.05)
+
+        while ( (epics_get("1idPG2:cam1:NumImages_RBV")-epics_get("1idPG2:cam1:NumImagesCounter_RBV")) != 0 ) {
+            #p "need", (epics_get("1idPG2:cam1:NumImages_RBV")-epics_get("1idPG2:cam1:NumImagesCounter_RBV")) 
+            PGPressSoftTrigger
+            sleep(fExposureTime + trigger_wait)
+            trigger_count++
+        }
+
+        #waitcount
+        getcounts
+
+        #while (epics_get("1idPG2:cam1:DetectorState_RBV")!="Idle") {   #Sometimes detector is in waiting state!!
+        #    sleep(settling_time)
+        #    time_elapsed = time()-tic
+        #    #if (epics_get("1idPG2:cam1:DetectorState_RBV")=="Waiting") {
+        #    #    epics_put("1idPG2:cam1:Acquire",0)
+        #    #}
+        #    if (time_elapsed > 10) {
+        #        p "Detector status is " epics_get("1idPG2:cam1:DetectorState_RBV", timeout) " for " time_elapsed "sec, ERROR!!"
+        #        PGPressSoftTrigger 
+        #        trigger_count++
+        #        sleep(0.5)
+        #    }
+        #}
+        tomo_save_par(0, "WF_1", i, tic, nfileNumber, fExposureTime, nFrame, trigger_count)
+        nfileNumber++
+    }
+
+    # move in sample
+    get_angles
+    A[sShiftMotor] = stagestartpos
+    move_em
+    waitmove
+    if (verbose != 0) { printf("WF-1 End\n")}
+
+    tic = time()
+    if (verbose != 0) {
+        p "Proj end Capture status", epics_get("1idPG2:TIFF1:Capture_RBV")
+        printf("Projection End\n")
+        }
+    while (epics_get("1idPG2:TIFF1:Capture_RBV") != "Done") {
+        sleep(0.05)
+        }
+    if (verbose != 0) {p "wait", time()-tic, "sec for Proj Capture to finish"}
+
+    ### data
+    nImages = 1 + int( (fOmegaStop - fOmegaBegin + 0.5*fOmegaStep)/fOmegaStep )
+    p "Number of scan images:", nImages
+
+    # set number of captures
+    epics_put("1idPG2:TIFF1:NumCapture",nImages, timeout)
+    # start capture
+    epics_put("1idPG2:TIFF1:Capture", "Capture")
+    # resetnumber_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:ResetFilter",1, timeout)
+    # get next file number
+    nfileNumber = ccdget_FileNum()
+
+    if (verbose != 0) { printf("Projection Start...\n")}
+    for (i = 0; i < nImages; i++) {
+	    # to wait if beam is down 
+        while ((epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF") && (testmode ==0)){
+            p "shutter closed ... waiting"
+            SOpen
+            sleep(60)
+        }        
+        
+        omega = fOmegaBegin + i*fOmegaStep;
+        get_angles
+        A[sOmegaMotor] = omega
+        move_em
+        waitmove
+
+        tic = time()
+        epics_put("1idPG2:cam1:Acquire", "Acquire")
+        sleep(0.1)        
+        trigger_count = 0
+
+        for (j = 0; j<nFrame; j++) {
+            PGPressSoftTrigger
+            sleep(fExposureTime + trigger_wait)
+        }
+        #sleep(0.05)
+                        
+        while ((epics_get("1idPG2:cam1:NumImages_RBV")-epics_get("1idPG2:cam1:NumImagesCounter_RBV")) != 0) {
+            PGPressSoftTrigger
+            sleep(fExposureTime + trigger_wait + 0.05)
+            trigger_count++
+        }
+        
+        #waitcount
+        getcounts
+        
+        #while (epics_get("1idPG2:cam1:DetectorState_RBV", timeout)!="Idle") {   #Sometimes detector is in waiting state!!
+        #    sleep(settling_time)
+        #    time_elapsed = time()-tic
+        #    if (time_elapsed > 10) {
+        #        p "Detector status is " epics_get("1idPG2:cam1:DetectorState_RBV", timeout) " for " time_elapsed "sec, ERROR!!"
+        #        PGPressSoftTrigger 
+        #        sleep(0.5)
+        #    }
+        #}
+
+        tomo_save_par(0, "Proj", i, tic, nfileNumber, fExposureTime, nFrame, trigger_count)        
+        nfileNumber++         
+    }
+    tic = time()
+    if (verbose != 0) {
+        p "Proj end Capture status", epics_get("1idPG2:TIFF1:Capture_RBV")
+        printf("Projection End\n")}
+
+    while (epics_get("1idPG2:TIFF1:Capture_RBV") != "Done") {
+        sleep(0.05)
+    }
+    if (verbose != 0) {p "wait", time()-tic, "sec for Proj Capture to finish"}
+
+    # move out sample & move rotation to WF position
+    get_angles
+    A[sShiftMotor] = stagestartpos+fSampleShift
+    A[sOmegaMotor] = bWFpos
+    move_em
+    waitmove
+    
+    ### back white
+    # set number of captures
+    epics_put("1idPG2:TIFF1:NumCapture",nWhiteField, timeout)
+    # start capture
+    if (verbose != 0) {p "press Capture"}
+    epics_put("1idPG2:TIFF1:Capture", "Capture")
+    # resetnumber_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:ResetFilter",1, timeout)
+    # get next file number
+    nfileNumber = ccdget_FileNum()
+
+    if (verbose != 0) { printf("WF-2 Start...\n")}
+    for (i = 0; i < nWhiteField; i++) {
+        # to wait if beam is down
+        while ((epics_get("PA:06BM:STA_A_FES_OPEN_PL") == "OFF") && (testmode ==0)){
+            p "shutter closed ... waiting"
+            SOpen
+            sleep(60)
+        }
+        
+        tic = time()
+        epics_put("1idPG2:cam1:Acquire", "Acquire")
+        #count_em fExposureTime*nFrame
+        sleep(0.1)
+ 
+        trigger_count = 0
+        for (j = 0; j<nFrame; j++) {        
+            PGPressSoftTrigger
+            sleep(fExposureTime+trigger_wait)
+        }
+        #sleep(0.02)
+
+        while ( (epics_get("1idPG2:cam1:NumImages_RBV")-epics_get("1idPG2:cam1:NumImagesCounter_RBV")) != 0 ) {
+            #p "need" #, (epics_get("1idPG2:cam1:NumImages_RBV")-epics_get("1idPG2:cam1:NumImagesCounter_RBV")) 
+            PGPressSoftTrigger
+            sleep(fExposureTime + trigger_wait + 0.05)
+            trigger_count++
+        }
+
+        #waitcount
+        getcounts
+
+        #while (epics_get("1idPG2:cam1:DetectorState_RBV")!="Idle") {   #Sometimes detector is in waiting state!!
+        #    sleep(settling_time)
+        #    time_elapsed = time()-tic
+        #    #if (epics_get("1idPG2:cam1:DetectorState_RBV")=="Waiting") {
+        #    #    epics_put("1idPG2:cam1:Acquire",0)
+        #    #}
+        #    if (time_elapsed > 10) {
+        #        p "Detector status is " epics_get("1idPG2:cam1:DetectorState_RBV") " for " time_elapsed "sec, ERROR!!"
+        #        PGPressSoftTrigger 
+        #        sleep(0.5)
+        #    }
+        #}
+
+        tomo_save_par(0, "WF_2", i, tic, nfileNumber, fExposureTime, nFrame, trigger_count)        
+        #nfileNumber = epics_get("1idPG2:TIFF1:FileNumber")
+        nfileNumber++
+    }	
+    # move in sample 
+    get_angles
+    A[sShiftMotor] = stagestartpos
+    move_em
+    waitmove
+    if (verbose != 0) { printf("WF-2 End\n")}
+
+    # close shutter
+    SClose 3 1
+    
+    ### dark field
+    # set number of captures
+    epics_put("1idPG2:TIFF1:NumCapture",nDarkField, timeout)
+    # start capture
+    epics_put("1idPG2:TIFF1:Capture", "Capture")
+    # resetnumber_filtered in PROC1 plugin
+    epics_put("1idPG2:Proc1:ResetFilter",1, timeout)
+    # get next file number
+    nfileNumber = ccdget_FileNum()
+
+    if (verbose != 0) { printf("Dark Start...\n")}
+    for (i = 0; i < nDarkField; i++) {
+
+        tic = time()
+        epics_put("1idPG2:cam1:Acquire", "Acquire")
+        #count_em fExposureTime*nFrame
+        sleep(0.1)
+        
+        trigger_count = 0
+
+        for (j = 0; j<nFrame; j++) {      #  
+            PGPressSoftTrigger                #
+            sleep(fExposureTime+trigger_wait)         #
+        }
+           
+        while ((epics_get("1idPG2:cam1:NumImages_RBV")-epics_get("1idPG2:cam1:NumImagesCounter_RBV")) != 0) {
+            PGPressSoftTrigger
+            sleep(fExposureTime + trigger_wait +0.05)
+            trigger_count++
+        }
+        
+        #waitcount
+        getcounts
+        
+        while (epics_get("1idPG2:cam1:DetectorState_RBV")!="Idle") {   #Sometimes detector is in waiting state!!
+            sleep(settling_time)
+            time_elapsed = time()-tic
+
+            if (time_elapsed > 10) {
+                p "Detector status is " epics_get("1idPG2:cam1:DetectorState_RBV") " for " time_elapsed "sec, ERROR!!"
+                PGPressSoftTrigger 
+                sleep(0.2)
+            }
+        }
+
+        tomo_save_par(0, "Dark", i, tic, nfileNumber, fExposureTime, nFrame, trigger_count)        
+        nfileNumber++
+    }
+    if (verbose != 0) { printf("Dark End\n")}
+    
+    # move back to fOmegaBegin
+    get_angles
+    A[sOmegaMotor] = fOmegaBegin
+    move_em
+    waitmove
+    
+    #switch back to normal mode			
+    ccd_initialize
+
+    t1 = time()-t0
+    }
+    p "Stage Final Position: " motor_mne(sShiftMotor) " = " A[sShiftMotor]
+    p "Total time elaspsed: " sprintf("%.2f",t1/60) " min"
+    off(log_to_save)
+}'  # TomoScan6_main
+
+
