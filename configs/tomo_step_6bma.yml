@@ -1,0 +1,25 @@
+# NOTE:
+# This is a yaml based scan configuration file that can be directly pass
+# to the tomo_step() function
+# i.e.
+# RE(tomo_step(SCAN_CONFIG.YML))
+
+tomo:
+  type:    step           # [step|fly]
+  n_white: 10             # num of white field before and after tomo
+  n_dark:  10             # num of dark field images after tomo
+  sample_out_position:
+    samx:  -5             # mm 
+    samy:   0             # mm
+    preci:  0             # degree, rotation
+  acquire_time:   0.05    # sec
+  acquire_period: 0.06    # sec, acquire_time+0.01, do not stage this one
+  omega_step:    0.5      # degree
+  omega_start:   0.0      # degree
+  omega_end:     5.0      # degree
+  n_frames:      5        # 5 frames -> 1 images
+
+output:        
+  filepath:    null       # use testing location
+  fileprefix:  test       # specify file name
+  type:        hdf5       # [tiff|tif, hdf|hdf1|hdf5]
