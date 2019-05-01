@@ -1,0 +1,18 @@
+# ~/.config/databroker/mongodb_config.yml
+
+description: 'heavyweight shared database'
+metadatastore:
+   module: 'databroker.headersource.mongo'
+   class: 'MDS'
+   config:
+       host: 'bach.aps.anl.gov'
+       port: 27017
+       database: 'metadatastore-production-v1'
+       timezone: 'US/Central'
+assets:
+   module: 'databroker.assets.mongo'
+   class: 'Registry'
+   config:
+       host: 'bach.aps.anl.gov'
+       port: 27017
+       database: 'filestore-production-v1'
