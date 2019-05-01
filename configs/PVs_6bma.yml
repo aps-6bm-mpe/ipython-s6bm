@@ -1,0 +1,151 @@
+# Notation
+# <*> : defined variables such as number of images, motor position
+# [*] : nominal data, selected from predefined list
+# "*" : fixed type input
+# ~r  : read only signal
+# ~w  : write only signal
+# ~rw : read & write signal
+# //  : additional comments about functionality
+# $$  : example usage in epics macro
+
+shutter:
+  pvs:
+    - "PA:06BM:STA_A_FES_OPEN_PL"        #~r ["OFF", "ON"]
+    - "6bmb1:rShtrA:Open.VAL"            #~w [1]                               //open shutter                          $$ epics_put("6bmb1:rShtrA:Open.VAL",1,0)
+    - "6bmb1:rShtrA:Close.VAL"           #~w [1]                               //close shutter                         $$ epics_put("6bmb1:rShtrA:Close.VAL",1,0)
+
+# point gray detector
+areadetector:
+  name: "grasshopper"
+  pvs: 
+    - "1idPG2:cam1:NumImages"            #~w <n_imgs>
+    - "1idPG2:cam1:ImageMode"            #~w ["Multiple","Single","Continuous"]
+    - "1idPG2:cam1:TriggerMode"          #~w ["Internal","External","Ext. Standard"]
+    - "1idPG2:cam1:TriggerSource"        #~w [0|"GPIO_0",1|"GPIO_2",2|"GPIO_3"]                                        $$ epics_put(sprintf("%sTriggerSource", CCDPV), 0, timeout)
+    - "1idPG2:cam1:TriggerPolarity"      #~w [0|"Low",1|"High"]                                                        $$ epics_put(sprintf("%sTriggerPolarity", CCDPV), 1, timeout)
+    - "1idPG2:cam1:TriggerDelayValAbs"   #~w [0~0.5]                                                                   $$ epics_put(sprintf("%sTriggerDelayValAbs", CCDPV), 0, timeout)
+    - "1idPG2:cam1:ShutterMode"          #~w [0:None,1:EPICS_PV,2:Detector output]
+    - "1idPG2:cam1:Format7Mode"          #~w [7]                               //should be always 7 ("7 (1920x1200)")
+    - "1idPG2:cam1:ConvertPixelFormat"   #~w [0]                               //always None
+    - "1idPG2:cam1:FrameRateOnOff"       #~w [0,1]                             //turn on/off "Frame rate enable"       $$ epics_put("1idPG2:cam1:FrameRateOnOff",0,0)
+    - "1idPG2:cam1:FrameRateValAbs"      #~w <frame_rate>                                                              $$ epics_put("1idPG2:cam1:FrameRateValAbs",10,0)
+    - "1idPG2:cam1:AcquireTime"          #~w <exposure_time>                                                           $$ epics_put("1idPG2:cam1:AcquireTime",fExposureTime, timeout)                                                 
+    - "1idPG2:cam1:AcquirePeriod"        #~w <exposure_time+wait_time>                                                 $$ epics_put("1idPG2:cam1:AcquirePeriod",fExposureTime+0.01, timeout)
+    - "1idPG2:cam1:Gain"                 #~w [0~30]
+    - "1idPG2:cam1:Acquire"              #~w ["Acquire", 0, 1]                                                         $$ epics_put("1idPG2:cam1:Acquire", "Acquire", (fExposureTime+0.01)*nFrame + 10); epics_put("1idPG2:cam1:Acquire",0)
+    - "1idPG2:cam1:NumImages_RBV"        #~r                                                                           $$ while ( (epics_get("1idPG2:cam1:NumImages_RBV")-epics_get("1idPG2:cam1:NumImagesCounter_RBV")) != 0 )
+    - "1idPG2:cam1:NumImagesCounter_RBV" #~r                                                                           $$ 
+    - "1idPG2:cam1:DetectorState_RBV"    #~r ["Idle","Waiting"]                //detector state                        $$ epics_get("1idPG2:cam1:DetectorState_RBV")
+    - "1idPG2:cam1:SoftwareTrigger"      #~w "Trigger"                         //                                      $$ epics_put(sprintf("%sSoftwareTrigger", CCDPV), "Trigger")
+    - "1idPG2:cam1:"
+    - "1idPG2:Proc1:EnableCallbacks"     #~w ["Enable"|1, "Disable"|0]
+    - "1idPG2:Proc1:EnableFilter"        #~w [1, 0]
+    - "1idPG2:Proc1:NumFilter"           #~w <n_imgs>
+    - "1idPG2:Proc1:ResetFilter"         #~w [1]                               //Resetnumber_filtered in PROC1 plugin  $$ epics_put("1idPG2:Proc1:ResetFilter",1, timeout)
+    - "1idPG2:Proc1:FilterType"          #~w ["Average"|1]                                                             $$ epics_put(sprintf("%sFilterType", ADPROCPV), 1, timeout)
+    - "1idPG2:Proc1:AutoResetFilter"     #~w [1]                                                                       $$ epics_put(sprintf("%sAutoResetFilter", ADPROCPV), 1, timeout)
+    - "1idPG2:Proc1:"
+    - "1idPG2:TIFF1:EnableCallbacks"     #~w ["Enable"|1, "Disable"|0]                                                 $$ epics_put(sprintf("%sEnableCallbacks", ADFILEPV), 1, timeout)
+    - "1idPG2:TIFF1:NDArrayPort"         #~w ["PROC1", "PG1"]                  //Switch port for TIFF plugin           $$ epics_put("1idPG2:TIFF1:NDArrayPort","PROC1", timeout)
+    - "1idPG2:TIFF1:FileWriteMode"       #~w ["Stream"|2,"Single"|0,"Capture"|1]
+    - "1idPG2:TIFF1:AutoSave"            #~w ["Yes"|1, "No"|0]
+    - "1idPG2:TIFF1:FilePath"            #~w <file save location>
+    - "1idPG2:TIFF1:FileName"            #~w <file name prefix>
+    - "1idPG2:TIFF1:FilePathExists_RBV"  #~r ["YES", "NO"]
+    - "1idPG2:TIFF1:NumCapture"          #~w <n_imgs>
+    - "1idPG2:TIFF1:Capture"             #~w ["Capture"|1,"Done"|0]
+    - "1idPG2:TIFF1:FileNumber"          #~rw                                  //Next file number                      $$ epics_get("1idPG2:TIFF1:FileNumber")
+    - "1idPG2:TIFF1:Capture_RBV"         #~r ["Done"]                          //Proj end Capture status               $$ while (epics_get("1idPG2:TIFF1:Capture_RBV") != "Done")
+    - "1idPG2:TIFF1:FileTemplate"        #~w                                                                           $$ epics_put(sprintf("%sFileTemplate", ADFILEPV), "%s%s_%06d.tif", timeout)   # default: %s%s_%06d.tif
+    - "1idPG2:TIFF1:"
+    - "1idPG2:image1:EnableCallbacks"    #~w ["Disable"|0,"Enable"|1]                                                  $$ epics_put(sprintf("%sEnableCallbacks", ADIMAGEPV), 1, timeout)  # 0: Disable 1: Enable
+    - "1idPG2:image1:NDArrayPort"        #~w ["PG1"]                           //image from                            $$ epics_put(sprintf("%sNDArrayPort", ADIMAGEPV), "PG1", timeout)
+    - "1idPG2:image1:"
+    - "1idPG2:Trans1:EnableCallbacks"    #~w ["Disable"|0,"Enable"|1]                                                  $$  epics_put(sprintf("%sEnableCallbacks", ADTRANSPV), "Disable", timeout)
+    - "1idPG2:Trans1:"
+
+# MCA:
+#   pvs:
+#     - "6bmXMAP:Acquiring"                #~r ["Done"]                          //CHECK IF DATA COLLECTION COMPLETE     $$ det_status=epics_get("6bmXMAP:Acquiring")
+#     - "6bmXMAP:DeadTime"                 #~r                                   //mca scan                              $$ _dt=epics_get("6bmXMAP:DeadTime")
+#     - "6bmXMAP:mca1.IDTIM"               #~r                                                                           $$ _dt1=epics_get("6bmXMAP:mca1.IDTIM")
+#     - "6bmXMAP:mca2.IDTIM"               #~r                                                                           $$ _dt2=epics_get("6bmXMAP:mca2.IDTIM")
+
+# motors PVs are not included in the macro
+# important build-in function vars in current epics macros
+# - move_em
+# - A
+# - get_angles
+# - motor_mne
+# - wait_move
+motors:
+  pvs:
+    # - "6bma1:allstop.VAL"                #~w 1                                 //Stop all motos at 6bm                 $$ epics_put("6bma1:allstop.VAL", 1)
+    - "6bmpreci:eFly:encoderOrStep"      #~w [0:encoder   1:motor step]
+    - "6bmpreci:eFly:autoReverse"        #~w [0:No        1:Yes]
+    - "6bmpreci:eFly:scanControl"        #~w [0:Standard  1:Custom]
+    - "6bmpreci:eFly:addTrig"            #~w [0:No        1:Yes]
+    - "6bmpreci:eFly:trigWidth"          #~w 0.005                             // in degree
+    - "6bmpreci:eFly:autoClearCntrs"     #~w [0:No        1:Yes]
+    - "6bmpreci:eFly:trigStartFrac"      #~w 0                                 // trigger location within scanDelta unit unkwown
+    - "6bmpreci:eFly:encoderResolution"  #~w 7.628e-5                          // softglue encoder resolution
+    - "6bmpreci:eFly:startPos"           #~w                                                                           $$ epics_put(eFly_start, _start, 1)
+    - "6bmpreci:eFly:endPos"             #~w                                                                           $$ epics_put(eFly_end, _end, 1)
+    - "6bmpreci:eFly:scanDelta"          #~w                                                                           $$ epics_put(eFly_step, _step, 1)
+    - "6bmpreci:eFly:slewSpeed"          #~w                                                                           $$ epics_put(eFly_spd, _speed, 1)
+    - "????"
+
+# unknown pvs
+mystries:
+  pvs:
+    - "6bma1:USdig_T7:1:Angle"           #~r                                   //tomo_save_par@tomo_6bm.mac            $$ tiltx=epics_get("6bma1:USdig_T7:1:Angle")
+    - "6bma1:m33.VAL"                    #~r                                   //tomo_save_par@tomo_6bm.mac
+    - "6bma1:D1Dmm_calc.VAL"             #~r                                   //tomo_save_par@tomo_6bm.mac
+    - "6bmXMAP:PresetReal"               #~w                                   //mcact@utilities.mac
+    - "6bmXMAP:EraseStart"               #~w                                   //mcact@utilities.mac
+    - "6bma1:m18.RBV"                    #~r                                   //mv_yr@utilities.mac                   $$ _nowY=epics_get("6bma1:m18.RBV")
+    - "6bma1:Keyence:1:ch1.VAL"          #~r                                   //mv_yr@utilities.mac                   $$ _keyence=epics_get("6bma1:Keyence:1:ch1.VAL")
+    - "6bma1:userCalc2.VAL"              #~r                                   //mv_yr@utilities.mac                   $$ _diffY=fabs(epics_get("6bma1:userCalc2.VAL"))
+    # - "6bma1:A%dsens_num.VAL"            #~rw [0~8]                            //SetPreampSens@preamp.mac              $$ epics_put(sprintf("6bma1:A%dsens_num.VAL", s), 0, 10)
+    # - "6bma1:A%dsens_unit.VAL"           #~rw ["pA","nA","uA","mA"]            //SetPreampOffsetUnit@preamp.mac        $$ epics_put(sprintf("6bma1:A%doffset_unit.VAL", s), "pA", 10)
+    # - "6bma1:A%doffset_num.VAL"          #~rw [0~8]                            //SetPreampOffset@premap.mac            $$ epics_put(sprintf("6bma1:A%doffset_num.VAL", s), 0, 10)
+    # - "6bma1:A%doffset_unit.VAL"         #~rw                                  //GetPreampOffsetUnit@premap.mac        $$ preamp=epics_get(sprintf("6bma1:A%doffset_unit.VAL", s))
+    # - "6bma1:A%doff_u_put.VAL"           #~rw                                  //GetPreampOffsetVal@preamp.mac         $$ preamp=epics_get(sprintf("6bma1:A%doff_u_put.VAL", s))
+    # - "6bma1:A%dinit.PROC"               #~rw                                  //SetPreampSettings@premap.mac          $$ epics_put(sprintf("6bma1:A%dinit.PROC", $1), 1, CB_TIME)   
+    # - "6bma2:userStringCalc8.AA"         #~r                                   //motor_cam_sweep@mca_scan.mac          $$ file_name=epics_get("6bma2:userStringCalc8.AA")
+    # - "6bma2:userStringCalc8.BB"         #~r                                   //motor_cam_sweep@mca_scan.mac          $$ path_name=epics_get("6bma2:userStringCalc8.BB")
+    # - "6bma1:GTIM_TIME"                  #~r                                   //get_beamline_parameters@mca_scan.mac  $$ epoch_time=sprintf("%15.8f", epics_get("6bma1:GTIM_TIME", "double"))
+    # - "6bma2:scaler1.T"                  #~r                                   //get_beamline_parameters@mca_scan.mac  $$ elapsed_time=epics_get("6bma2:scaler1.T")
+    - "6bma1:m19.RBV"                    #~r                                   //get_beamline_parameters@mca_scan.mac  $$ samX=epics_get("6bma1:m19.RBV")
+    - "6bma1:m18.RBV"                    #~r                                   //get_beamline_parameters@mca_scan.mac  $$ samY=epics_get("6bma1:m18.RBV")
+    - "6bma1:m17.RBV"                    #~r                                   //get_beamline_parameters@mca_scan.mac  $$ samZ=epics_get("6bma1:m17.RBV")
+    - "6bmpreci:m1.RBV"                  #~r                                   //get_beamline_parameters@mca_scan.mac  $$ ry=epics_get("6bmpreci:m1.RBV")
+    - "6bma1:m58.RBV"                    #~r                                   //get_beamline_parameters@mca_scan.mac  $$ samX2=epics_get("6bma1:m58.RBV")
+    - "6bma1:m57.RBV"                    #~r                                   //get_beamline_parameters@mca_scan.mac  $$ samY2=epics_get("6bma1:m57.RBV")
+    - "6bma1:m20.RBV"                    #~r                                   //get_beamline_parameters@mca_scan.mac  $$ ge1X=epics_get("6bma1:m20.RBV")
+    - "6bma1:m21.RBV"                    #~r                                   //get_beamline_parameters@mca_scan.mac  $$ ge1Y=epics_get("6bma1:m21.RBV")
+    - "6bma1:m30.RBV"                    #~r                                   //get_beamline_parameters@mca_scan.mac  $$ ge2X=epics_get("6bma1:m30.RBV")
+    - "6bma1:m31.RBV"                    #~r                                   //get_beamline_parameters@mca_scan.mac  $$ ge2Y=epics_get("6bma1:m31.RBV")
+    - "6bma1:m26.RBV"                    #~r                                   //get_beamline_parameters@mca_scan.mac  $$ det5X=epics_get("6bma1:m26.RBV")
+    - "6bma1:m27.RBV"                    #~r                                   //get_beamline_parameters@mca_scan.mac  $$ det5Y=epics_get("6bma1:m27.RBV")
+    - "6bma1:m25.RBV"                    #~r                                   //get_beamline_parameters@mca_scan.mac  $$ det5Z=epics_get("6bma1:m25.RBV")
+    - "6bma1:m1.RBV"                     #~r                                   //get_beamline_parameter@mca_scan.mac   $$ p1o=epics_get("6bma1:m1.RBV");
+    - "6bma1:m2.RBV"                     #~r                                   //get_beamline_parameter@mca_scan.mac   $$ p1i=epics_get("6bma1:m2.RBV");
+    - "6bma1:m3.RBV"                     #~r                                   //get_beamline_parameter@mca_scan.mac   $$ p1b=epics_get("6bma1:m3.RBV");
+    - "6bma1:m4.RBV"                     #~r                                   //get_beamline_parameter@mca_scan.mac   $$ p1t=epics_get("6bma1:m4.RBV");
+    - "6bma1:m5.RBV"                     #~r                                   //get_beamline_parameter@mca_scan.mac   $$ p2o=epics_get("6bma1:m5.RBV");
+    - "6bma1:m6.RBV"                     #~r                                   //get_beamline_parameter@mca_scan.mac   $$ p2i=epics_get("6bma1:m6.RBV");
+    - "6bma1:m7.RBV"                     #~r                                   //get_beamline_parameter@mca_scan.mac   $$ p2b=epics_get("6bma1:m7.RBV");
+    - "6bma1:m8.RBV"                     #~r                                   //get_beamline_parameter@mca_scan.mac   $$ p2t=epics_get("6bma1:m8.RBV");
+    - "6bmb1:m1.RBV"                     #~r                                   //get_beamline_parameter@mca_scan.mac   $$ p3o=epics_get("6bmb1:m1.RBV");
+    - "6bmb1:m3.RBV"                     #~r                                   //get_beamline_parameter@mca_scan.mac   $$ p3i=epics_get("6bmb1:m3.RBV");
+    - "6bmb1:m4.RBV"                     #~r                                   //get_beamline_parameter@mca_scan.mac   $$ p3b=epics_get("6bmb1:m4.RBV");
+    - "6bmb1:m2.RBV"                     #~r                                   //get_beamline_parameter@mca_scan.mac   $$ p3t=epics_get("6bmb1:m2.RBV");
+    - "6bma1:m58.RBV"                    #~r                                   //get_beamline_parameter@msc_scan.mac   $$ p4o=epics_get("6bma1:m58.RBV");
+    - "6bma1:m57.RBV"                    #~r                                   //get_beamline_parameter@msc_scan.mac   $$ p4i=epics_get("6bma1:m57.RBV");
+    - "6bma1:m59.RBV"                    #~r                                   //get_beamline_parameter@msc_scan.mac   $$ p4b=epics_get("6bma1:m59.RBV");
+    - "6bma1:m60.RBV"                    #~r                                   //get_beamline_parameter@msc_scan.mac   $$ p4t=epics_get("6bma1:m60.RBV");
+    - "6bma1:m62.RBV"                    #~r                                   //get_beamline_parameter@msc_scan.mac   $$ p5o=epics_get("6bma1:m62.RBV");
+    - "6bma1:m61.RBV"                    #~r                                   //get_beamline_parameter@msc_scan.mac   $$ p5i=epics_get("6bma1:m61.RBV");
+    - "6bma1:m64.RBV"                    #~r                                   //get_beamline_parameter@msc_scan.mac   $$ p5b=epics_get("6bma1:m64.RBV");
+    - "6bma1:m63.RBV"                    #~r                                   //get_beamline_parameter@msc_scan.mac   $$ p5t=epics_get("6bma1:m63.RBV");
