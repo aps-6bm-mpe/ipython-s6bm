@@ -102,5 +102,5 @@ The environment var `IPYTHONDIR` needs to be set where the profile folder is, or
 Issue the following command in the terminal to run IPython with pre-configured environment for Tomo-characterization at 6-BM-A:
 
 ```bash
->> ipython --profile=tomo
+>> ipython --profile=s6bm
 ```
