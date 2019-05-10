@@ -130,7 +130,7 @@ config_cam = {
     "image_mode":     "Multiple",  #
     "trigger_mode":   "Internal",  #
     "acquire_time":   0.05,        # exposure time (fExposureTime)
-    # "acquire_period": 0.05+0.01,   #
+    "acquire_period": 0.05+0.01,   #
     "gain":           5,           # detector gain [0~30]
 }
 
@@ -189,6 +189,14 @@ else:
     print("***--- config_tiff1")
     print("***--- config_hdf1")
     print("***before the acutal scan")
+
+    print("***Switch to manual mode for:")
+    print("***--FrameRate")
+    det.cam.frame_rate_auto_mode.put(0)
+    print("***--AcquirePeriod")
+    det.cam.acquire_period_auto_mode.put(0)
+    print("***--Gain")
+    det.cam.gain_auto_mode.put(0)
 
 
 # --
