@@ -1,0 +1,91 @@
+#local FSmotor _timeout
+#local _eFly_start _eFly_end _eFly_step _eFly_spd
+
+
+FSmotor  = '6bmpreci'
+_timeout = 1
+
+
+eFly_mode      = sprintf('%s:eFly:encoderOrStep', FSmotor)
+eFly_reverse   = sprintf('%s:eFly:autoReverse', FSmotor)
+eFly_control   = sprintf('%s:eFly:scanControl', FSmotor)
+eFly_addTrig   = sprintf('%s:eFly:addTrig', FSmotor)
+eFly_trigWidth = sprintf('%s:eFly:trigWidth', FSmotor)
+eFly_autoclear = sprintf('%s:eFly:autoClearCntrs', FSmotor)
+eFly_trigfrac  = sprintf('%s:eFly:trigStartFrac', FSmotor)       # trigger location within scanDelta
+eFly_encodres  = sprintf('%s:eFly:encoderResolution', FSmotor)   # softglue encoder resolution
+
+eFly_start = sprintf('%s:eFly:startPos', FSmotor)
+eFly_end   = sprintf('%s:eFly:endPos', FSmotor)
+eFly_step  = sprintf('%s:eFly:scanDelta', FSmotor)
+eFly_spd   = sprintf('%s:eFly:slewSpeed', FSmotor)
+
+
+def eFly_initialize '{
+    epics_put(eFly_mode, 0, _timeout)             # 0:encoder   1:motor step
+    epics_put(eFly_reverse, 0, _timeout)          # 0:No        1:Yes
+    epics_put(eFly_control, 0, _timeout)          # 0:Standard  1:Custom
+    epics_put(eFly_addTrig, 0, _timeout)          # 0:No        1:Yes
+    epics_put(eFly_trigWidth, 0.005, _timeout)    # degree (precision:3)
+    epics_put(eFly_autoclear, 1, _timeout)        # 0:No        1:Yes
+    epics_put(eFly_trigfrac, 0.00000, _timeout)   # unit?? (precision:5)
+    epics_put(eFly_encodres, 7.628e-05, _timeout) # (precision:3)
+}'
+
+
+def eFly_ses '{
+    local _start _end _step
+
+    old_start = epics_get(eFly_start)
+    old_end   = epics_get(eFly_end)
+    old_step  = epics_get(eFly_step)
+
+    _start = $1
+    _end   = $2
+    _step  = $3
+    
+    if ( _step < 0 ) { _step = _step*-1 }
+    
+    if ( $# != 3 ) {
+        p "Usage: eFly_ses [start] [end] [step]"
+        p "    [start]: scan start (degree)"
+        p "      [end]: scan stop (degree)"
+        p "     [step]: scan step (degree) [always positive]"
+        p ""
+        printf("Current eFly par ==> start: %03.3f end: %03.3f step: %03.3f", old_start, old_end, old_step)
+        p ""
+        return
+    }
+    
+    printf("Old eFly par ==> start: %03.3f end: %03.3f step: %03.3f\n", old_start, old_end, old_step)
+    printf("New eFly par ==> start: %03.3f end: %03.3f step: %03.3f\n", _start, _end, _step)
+    
+    epics_put(eFly_start, _start, 1)
+    epics_put(eFly_end, _end, 1)
+    epics_put(eFly_step, _step, 1)
+
+}'
+
+def eFly_speed '{
+    local _speed
+
+    old_speed = epics_get(eFly_spd)
+
+    _speed = $1
+    
+    if ( _speed < 0 ) { _speed = _speed*-1 }
+    
+    if ( $# != 1 ) {
+        p "Usage: eFly_speed [speed] (deg/sec)"
+        p ""
+        printf("Current eFly speed ==> %03.3f deg/sec", old_speed)
+        p ""
+        return
+    }
+    
+    printf("change eFly speed:  %03.3f ==> %03.3f (deg/s)\n", old_speed, _speed)
+    
+    epics_put(eFly_spd, _speed, 1)
+
+}'
+

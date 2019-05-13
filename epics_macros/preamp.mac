@@ -1,0 +1,300 @@
+def OptimizePreampSettings (s) '{
+    """
+    ASSUMES OFFSET SIGN AND INVERT ARE ALREADY CORRECT
+    """
+    local val iLoop
+    
+    ### KNOWN GOOD SETTING 20 nAV 200 pA 700
+    # SetPreampSettings s 20 "nA/V" 200 "pA" 700
+    SetPreampSettings s 1 "pA/V" 1 "pA" 100
+    
+    ## GET INITIAL STATE
+    SOpen
+    ct
+    val=S[1]
+    
+    ## GET SENS UNIT FIRST
+    if ((val < 1000) || (val > 500000)) {
+        SetPreampSens (s, 6)
+        p "optimizing sensitivity unit"
+        for (iLoop=0; iLoop<4; iLoop++) {
+            sleep(1)
+            SetPreampSensUnit (s, iLoop)
+            
+            ct
+            val=S[1]
+            if ((val > 1000) && (val < 500000)) {
+                break
+            }
+        }
+    }
+    else {
+        p "sensitivity unit optimal"
+    }
+    
+    ## GET SENS SECOND
+    p "optimizing sensitivity value"
+    for (iLoop=0; iLoop<9; iLoop++) {
+        sleep(1)
+        SetPreampSens (s, iLoop)
+        
+        ct
+        val=S[1]
+        if ((val > 1000) && (val < 500000)) {
+            break
+        }
+    }
+    
+    SClose
+    ## GET OFFSET UNIT THIRD
+    p "optimizing offset unit"
+    for (iLoop=0; iLoop<4; iLoop++) {
+        sleep(1)
+        SetPreampOffsetUnit (s, iLoop)
+        
+        ct
+        val=S[1]
+        if ((val > 600) && (val < 5000)) {
+            break
+        }
+    }
+    
+    ## GET OFFSET VALUE FOURTH
+    p "optimizing offset unit"
+    for (iLoop=0; iLoop<4; iLoop++) {
+        sleep(1)
+        SetPreampOffset (s, iLoop)
+        
+        ct
+        val=S[1]
+        if ((val > 600) && (val < 800)) {
+            break
+        }
+    }
+}'
+
+##################################
+def SetPreampSens (s, u) '{
+    """
+    """
+    if ((u < 0) || (u >8)) {
+        p "u is between 0 and 8"
+    }
+    
+    if (u == 0) {
+        epics_put(sprintf("6bma1:A%dsens_num.VAL", s), 0, 10)
+        p "1 " GetPreampSensUnit (s)
+    }
+    if (u == 1) {
+        epics_put(sprintf("6bma1:A%dsens_num.VAL", s), 1, 10)
+        p "2 " GetPreampSensUnit (s)
+    }
+    if (u == 2) {
+        epics_put(sprintf("6bma1:A%dsens_num.VAL", s), 2, 10)
+        p "5 " GetPreampSensUnit (s)
+    }
+    if (u == 3) {
+        epics_put(sprintf("6bma1:A%dsens_num.VAL", s), 3, 10)
+        p "10 " GetPreampSensUnit (s)
+    }
+    if (u == 4) {
+        epics_put(sprintf("6bma1:A%dsens_num.VAL", s), 4, 10)
+        p "20 " GetPreampSensUnit (s)
+    }
+    if (u == 5) {
+        epics_put(sprintf("6bma1:A%dsens_num.VAL", s), 5, 10)
+        p "50 " GetPreampSensUnit (s)
+    }
+    if (u == 6) {
+        epics_put(sprintf("6bma1:A%dsens_num.VAL", s), 6, 10)
+        p "100 " GetPreampSensUnit (s)
+    }
+    if (u == 7) {
+        epics_put(sprintf("6bma1:A%dsens_num.VAL", s), 7, 10)
+        p "200 " GetPreampSensUnit (s)
+    }
+    if (u == 8) {
+        epics_put(sprintf("6bma1:A%dsens_num.VAL", s), 8, 10)
+        p "500 " GetPreampSensUnit (s)
+    }
+}'
+
+def SetPreampSensUnit (s, u) '{
+    """
+    """
+    if ((u < 0) || (u >3)) {
+        p "u is between 0 and 3"
+    }
+    
+    if (u == 0) {
+        epics_put(sprintf("6bma1:A%dsens_unit.VAL", s), "pA/V", 10)
+        p "pA/V"
+    }
+    if (u == 1) {
+        epics_put(sprintf("6bma1:A%dsens_unit.VAL", s), "nA/V", 10)
+        p "nA/V"
+    }
+    if (u == 2) {
+        epics_put(sprintf("6bma1:A%dsens_unit.VAL", s), "uA/V", 10)
+        p "uA/V"
+    }
+    if (u == 3) {
+        epics_put(sprintf("6bma1:A%dsens_unit.VAL", s), "mA/V", 10)
+        p "mA/V"
+    }
+}'
+
+def SetPreampOffsetUnit (s, u) '{
+    """
+    """
+    if ((u < 0) || (u >3)) {
+        p "u is between 0 and 3"
+    }
+    
+    if (u == 0) {
+        epics_put(sprintf("6bma1:A%doffset_unit.VAL", s), "pA", 10)
+        p "pA/V"
+    }
+    if (u == 1) {
+        epics_put(sprintf("6bma1:A%doffset_unit.VAL", s), "nA", 10)
+        p "nA/V"
+    }
+    if (u == 2) {
+        epics_put(sprintf("6bma1:A%doffset_unit.VAL", s), "uA", 10)
+        p "uA/V"
+    }
+    if (u == 3) {
+        epics_put(sprintf("6bma1:A%doffset_unit.VAL", s), "mA", 10)
+        p "mA/V"
+    }
+}'
+
+def SetPreampOffset (s, u) '{
+    """
+    """
+    if ((u < 0) || (u >8)) {
+        p "u is between 0 and 8"
+    }
+    
+    if (u == 0) {
+        epics_put(sprintf("6bma1:A%doffset_num.VAL", s), 0, 10)
+        p "1 " GetPreampOffsetUnit (s)
+    }
+    if (u == 1) {
+        epics_put(sprintf("6bma1:A%doffset_num.VAL", s), 1, 10)
+        p "2 " GetPreampOffsetUnit (s)
+    }
+    if (u == 2) {
+        epics_put(sprintf("6bma1:A%doffset_num.VAL", s), 2, 10)
+        p "5 " GetPreampOffsetUnit (s)
+    }
+    if (u == 3) {
+        epics_put(sprintf("6bma1:A%doffset_num.VAL", s), 3, 10)
+        p "10 " GetPreampOffsetUnit (s)
+    }
+    if (u == 4) {
+        epics_put(sprintf("6bma1:A%doffset_num.VAL", s), 4, 10)
+        p "20 " GetPreampOffsetUnit (s)
+    }
+    if (u == 5) {
+        epics_put(sprintf("6bma1:A%doffset_num.VAL", s), 5, 10)
+        p "50 " GetPreampOffsetUnit (s)
+    }
+    if (u == 6) {
+        epics_put(sprintf("6bma1:A%doffset_num.VAL", s), 6, 10)
+        p "100 " GetPreampOffsetUnit (s)
+    }
+    if (u == 7) {
+        epics_put(sprintf("6bma1:A%doffset_num.VAL", s), 7, 10)
+        p "200 " GetPreampOffsetUnit (s)
+    }
+    if (u == 8) {
+        epics_put(sprintf("6bma1:A%doffset_num.VAL", s), 8, 10)
+        p "500 " GetPreampOffsetUnit (s)
+    }
+}'
+
+##################################
+def GetPreampSens (s) '{
+    """
+    """   
+    local preamp
+    
+    preamp=epics_get(sprintf("6bma1:A%dsens_num.VAL", s))
+    return preamp
+}'
+
+def GetPreampSensUnit (s) '{
+    """
+    """   
+    local preamp
+    
+    preamp=epics_get(sprintf("6bma1:A%dsens_unit.VAL", s))
+    return preamp
+}'
+
+def GetPreampOffset (s) '{
+    """
+    """   
+    local preamp
+    
+    preamp=epics_get(sprintf("6bma1:A%doffset_num.VAL", s))
+    return preamp
+}'
+
+def GetPreampOffsetUnit (s) '{
+    """
+    """   
+    local preamp
+    
+    preamp=epics_get(sprintf("6bma1:A%doffset_unit.VAL", s))
+    return preamp
+}'
+
+def GetPreampOffsetVal (s) '{
+    """
+    """   
+    local preamp
+    
+    preamp=epics_get(sprintf("6bma1:A%doff_u_put.VAL", s))
+    return preamp
+}'
+
+def SetPreampSettings '{
+    # Usage : $0 [ICnumber] [sens] [sens_unit] [offset] [offset_unit] [offset]
+    if( $# != 6) {
+      p "Usage: $0 [ICnumber] [sens] [sens_unit] [offset] [offset_unit] [offset_val]"
+      exit
+    }
+    
+    epics_put(sprintf("6bma1:A%dsens_num.VAL", $1), "$2", CB_TIME)
+    epics_put(sprintf("6bma1:A%dsens_unit.VAL", $1), "$3", CB_TIME)
+
+    epics_put(sprintf("6bma1:A%doffset_num.VAL", $1), "$4", CB_TIME)
+    epics_put(sprintf("6bma1:A%doffset_unit.VAL", $1), "$5", CB_TIME)
+    
+    epics_put(sprintf("6bma1:A%doff_u_put.VAL", $1), "$6", CB_TIME)
+
+    epics_put(sprintf("6bma1:A%dinit.PROC", $1), 1, CB_TIME)   
+}'
+
+#************************************************************
+def GetPreampUnit (s) '{
+    local preamp
+    
+    preamp=epics_get(s, "double")
+    if (preamp==0){
+        preamp=0.001
+    }
+    if (preamp==1){
+        preamp=1
+    }
+    if (preamp==2){
+        preamp=1000
+    }
+    if (preamp==3){
+        preamp=1000000
+    }
+    return preamp
+}'
+

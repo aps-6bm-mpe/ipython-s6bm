@@ -1,0 +1,277 @@
+global CCDPV 
+
+local CCDID ADFILEPV 
+
+CCDID= '1idPG2'
+
+
+CCDPV     = sprintf('%s:cam1:', CCDID)
+ADFILEPV  = sprintf('%s:TIFF1:', CCDID)
+ADIMAGEPV = sprintf('%s:image1:', CCDID)
+ADPROCPV  = sprintf('%s:Proc1:', CCDID)
+ADTRANSPV = sprintf('%s:Trans1:', CCDID)
+
+
+def PGPressSoftTrigger '{
+    epics_put(sprintf("%sSoftwareTrigger", CCDPV), "Trigger")
+}'
+
+def ccdset_FileTIFF1 '{
+    local mode numcap timeout
+    timeout = 5
+    mode    = $1
+    numcap  = $2      # number of capture(s)
+    verbose = $3
+    
+    if ( numcap <= 0 ) { numcap = 1 }
+    
+    if ( mode == 0 ) {
+        if (verbose == 1) {p "Reset FileTIFF1 PV to single mode"}
+        epics_put(sprintf("%sEnableCallbacks", ADFILEPV), 1, timeout)   # 0: Disable 1: Enable
+        #epics_put(sprintf("%sNDArrayPort", ADFILEPV), "PG1", timeout)  # image directly from PG1
+        #epics_put(sprintf("%sEnableCallbacks", ADPROCPV), 0, timeout)  # disable PROC1
+        epics_put(sprintf("%sFileWriteMode", ADFILEPV), mode, timeout)  # 0: Single  1: Capture  2: Stream
+        epics_put(sprintf("%sCapture", ADFILEPV), 0, timeout)           # 0: Done  1: Capture
+        epics_put(sprintf("%sAutoSave", ADFILEPV), 0, timeout)          # 0: No    1: Yes
+        epics_put(sprintf("%sNumCapture", ADFILEPV), 1, timeout)
+        epics_put(sprintf("%sFileTemplate", ADFILEPV), "%s%s_%06d.tif", timeout)   # default: %s%s_%06d.tif
+    }
+
+    if ( mode == 1 ) {
+        if (verbose == 1) {p "Reset FileTIFF1 PV to capture mode"}
+        epics_put(sprintf("%sEnableCallbacks", ADFILEPV), 1, timeout)   # 0: Disable 1: Enable
+        epics_put(sprintf("%sFileWriteMode", ADFILEPV), mode, timeout)  # 0: Single  1: Capture  2: Stream
+        epics_put(sprintf("%sCapture", ADFILEPV), 0, timeout)           # 0: Done  1: Capture
+        epics_put(sprintf("%sAutoSave", ADFILEPV), 0, timeout)          # 0: No    1: Yes
+        epics_put(sprintf("%sNumCapture", ADFILEPV), numcap, timeout)
+        epics_put(sprintf("%sFileTemplate", ADFILEPV), "%s%s_%06d.tif", timeout)   # default: %s%s_%06d.tif
+    }
+
+    if ( mode == 2 ) {
+        if (verbose == 1) {p "Reset FileTIFF1 PV to stream mode"}
+        epics_put(sprintf("%sEnableCallbacks", ADFILEPV), 1, timeout)   # 0: Disable 1: Enable
+        epics_put(sprintf("%sFileWriteMode", ADFILEPV), mode, timeout)  # 0: Single  1: Capture  2: Stream
+        epics_put(sprintf("%sCapture", ADFILEPV), 0, timeout)           # 0: Done  1: Capture
+        epics_put(sprintf("%sAutoSave", ADFILEPV), 0, timeout)          # 0: No    1: Yes
+        epics_put(sprintf("%sNumCapture", ADFILEPV), numcap, timeout)
+        epics_put(sprintf("%sFileTemplate", ADFILEPV), "%s%s_%06d.tif", timeout)   # default: %s%s_%06d.tif
+    }
+
+}'
+
+def ccdset_FileTIFF_save '{
+    local auto_save
+    auto_save = $1
+
+    if ( auto_save >= 1) {auto_save = 1}
+
+    epics_put(sprintf("%sAutoSave", ADFILEPV), auto_save, timeout)          # 0: No    1: Yes
+    
+}'
+
+
+def ccdset_Image '{
+    local mode timeout
+    timeout = 5
+    mode = $1
+    verbose = $2
+    
+    if ( mode == 0 ) {
+        if (verbose == 1) {p "Reset Image PV to single frame mode."}
+        epics_put(sprintf("%sEnableCallbacks", ADIMAGEPV), 1, timeout)  # 0: Disable 1: Enable
+        epics_put(sprintf("%sNDArrayPort", ADFILEPV), "PG1", timeout)   # image directly from PG1
+        epics_put(sprintf("%sNDArrayPort", ADIMAGEPV), "PG1", timeout)  # FileTIFF_PV directly from PG1
+        epics_put(sprintf("%sEnableCallbacks", ADPROCPV), 0, timeout)   # disable PROC1        
+    }
+
+    if ( mode == 1 ) {
+        if (verbose == 1) {p "Reset Image PV to multi-frame mode."}
+        epics_put(sprintf("%sEnableCallbacks", ADIMAGEPV), 1, timeout)  # 0: Disable 1: Enable
+        epics_put(sprintf("%sEnableCallbacks", ADPROCPV), 1, timeout)   # enable PROC1
+        epics_put(sprintf("%sEnableFilter", ADPROCPV), 1, timeout)      # enable PROC1 filter
+        epics_put(sprintf("%sFilterType", ADPROCPV), 1, timeout)        # PROC1 filter type to "Average"
+        epics_put(sprintf("%sFilterCallbacks", ADPROCPV), 1, timeout)   # PROC1 filter callbacks to "Array N only"        
+        epics_put(sprintf("%sAutoResetFilter", ADPROCPV), 1, timeout)   # PROC1 filter Auto reset filter
+        epics_put(sprintf("%sResetFilter", ADPROCPV), 1, timeout)       # reset PROC1 filter
+        epics_put(sprintf("%sNDArrayPort", ADIMAGEPV), "PROC1", timeout)# image from PROC1
+        epics_put(sprintf("%sNDArrayPort", ADFILEPV), "PROC1", timeout) # FileTIFF_PV from PROC1
+    }
+}'
+
+def ccd_initialize '{
+    local timeout mode
+    
+    mode = $1
+    timeout = 3
+    
+    #### internal trigger, "single" image
+    if ( mode == 0 ) {
+    
+    # Trigger mode
+    epics_put(sprintf("%sTriggerMode", CCDPV), "Internal", timeout)
+    # Trigger source
+    epics_put(sprintf("%sTriggerSource", CCDPV), 0, timeout)       # 0: GPIO_0   1: GPIO_2   2: GPIO_3
+    # Trigger polarity (should be high)
+    epics_put(sprintf("%sTriggerPolarity", CCDPV), 1, timeout)     # 0: Low      1: High
+    # Trigger delay 
+    epics_put(sprintf("%sTriggerDelayValAbs", CCDPV), 0, timeout)  # 0 ~ 0.5 (precision: 3)
+
+    # Shutter mode
+    epics_put(sprintf("%sShutterMode", CCDPV), 0, timeout)         # 0: None   1: EPICS_PV   2: Detector output
+
+    # Format 7 mode
+    epics_put(sprintf("%sFormat7Mode", CCDPV), 7, timeout)         # should be always 7 ("7 (1920x1200)")
+    # Convert raw
+    epics_put(sprintf("%sConvertPixelFormat", CCDPV), 0, timeout)  # should be always 0 ("0 (None)")
+
+    # stop acquire
+    epics_put(sprintf("%sAcquire", CCDPV), 0, timeout)
+    # Image mode
+    epics_put(sprintf("%sImageMode", CCDPV), "Single", timeout)
+    # Frame rate enable (Trigger mode has to be Internal)
+    epics_put(sprintf("%sFrameRateOnOff", CCDPV), "On", timeout)
+    # Frame rate 
+    epics_put(sprintf("%sFrameRateValAbs", CCDPV), 1.0, timeout)     # 0 ~ 82.4742 (precision: 3)
+    
+    # reset File PV
+    ccdset_FileTIFF1
+    # reset Image PV
+    ccdset_Image
+    # disable Proc
+    epics_put(sprintf("%sEnableCallbacks", ADPROCPV), "Disable", timeout)   # 0: Disable 1: Enable
+    # disable Trans
+    epics_put(sprintf("%sEnableCallbacks", ADTRANSPV), "Disable", timeout)  # 0: Disable 1: Enable            
+    }
+
+    #### external trigger
+    if ( mode == 1) {
+    p "initialize " CCDID " in mode 1"
+    
+    # Trigger mode
+    epics_put(sprintf("%sTriggerMode", CCDPV), "Ext. Standard", timeout)
+    # Trigger source
+    epics_put(sprintf("%sTriggerSource", CCDPV), 0, timeout)       # 0: GPIO_0   1: GPIO_2   2: GPIO_3
+    # Trigger polarity (should be high)
+    epics_put(sprintf("%sTriggerPolarity", CCDPV), 1, timeout)     # 0: Low      1: High
+    # Trigger delay 
+    epics_put(sprintf("%sTriggerDelayValAbs", CCDPV), 0, timeout)  # 0 ~ 0.5 (precision: 3)
+
+    # Shutter mode
+    epics_put(sprintf("%sShutterMode", CCDPV), 0, timeout)         # 0: None   1: EPICS_PV   2: Detector output
+
+    # Format 7 mode
+    epics_put(sprintf("%sFormat7Mode", CCDPV), 7, timeout)         # should be always 7 ("7 (1920x1200)")
+    # Convert raw
+    epics_put(sprintf("%sConvertPixelFormat", CCDPV), 0, timeout)  # should be always 0 ("0 (None)")
+
+    # stop acquire
+    epics_put(sprintf("%sAcquire", CCDPV), 0, timeout)
+    # Image mode
+    epics_put(sprintf("%sImageMode", CCDPV), "Multiple", timeout)
+    
+    # reset File PV
+    ccdset_FileTIFF1
+    # reset Image PV
+    ccdset_Image
+    # disable Proc
+    epics_put(sprintf("%sEnableCallbacks", ADPROCPV), "Disable", timeout)   # 0: Disable 1: Enable
+    # disable Trans
+    epics_put(sprintf("%sEnableCallbacks", ADTRANSPV), "Disable", timeout)  # 0: Disable 1: Enable       
+    }
+
+}'
+
+def ccd_initialize_multiframe '{
+    local timeout
+    
+    timeout = 3
+
+    # stop acquire
+    epics_put(sprintf("%sAcquire", CCDPV), 0, timeout)
+    # Image mode
+    epics_put(sprintf("%sImageMode", CCDPV), "Multiple", timeout)
+    # Frame rate enable (Trigger mode has to be Internal)
+    epics_put(sprintf("%sFrameRateOnOff", CCDPV), "On", timeout)
+    # Frame rate 
+    epics_put(sprintf("%sFrameRateValAbs", CCDPV), 1, timeout)     # 0 ~ 82.4742 (precision: 3)
+    
+    # reset File PV
+    ccdset_FileTIFF1
+    # reset Image PV
+    ccdset_Image
+    # disable Proc
+    epics_put(sprintf("%sEnableCallbacks", ADPROCPV), 0, timeout)   # 0: Disable 1: Enable
+    # disable Trans
+    epics_put(sprintf("%sEnableCallbacks", ADTRANSPV), 0, timeout)  # 0: Disable 1: Enable            
+}'
+
+def ccdset_FilePath(sPath) '{
+
+    if (sPath == 0) {
+        local _folder_string timeout
+        string array _folder_string[256]
+
+        timeout = 3
+        _folder_string=epics_get(sprintf("%sFilePath", ADFILEPV))
+        
+        p ""
+        p "Usage: ccdset_FilePath [file_path]"
+        p ""
+        p " Current Path: " _folder_string
+        p ""
+        return 
+    }
+
+    # set file path
+    epics_put(sprintf("%sFilePath", ADFILEPV),sprintf("Y:\\%s",sPath), timeout)
+}'
+
+
+def ccdset_FilePrefix(sPrefix) '{
+    
+    if (sPrefix == 0) {
+        local _name_string timeout
+        string array _name_string[256]
+
+        timeout = 3
+        _name_string=epics_get(sprintf("%sFileName", ADFILEPV))
+
+        p ""
+        p "Usage: ccdset_FilePrefix(file_prefix)"
+        p ""
+        p "    current: " _name_string
+        return 
+    }
+
+    # set file name prefix
+    epics_put(sprintf("%sFileName", ADFILEPV),sPrefix, timeout)
+}'
+
+def ccdset_FileNum(iNum) '{
+    local timeout
+    timeout = 3
+    
+    if (iNum == 0) {
+        local _iNum
+
+        _iNum=epics_get(sprintf("%sFileNumber", ADFILEPV))
+        
+        p ""
+        p "Usage: ccdset_FileNum(file_number)"
+        p ""
+        p " Current File Number: " _iNum
+        p ""
+        return 
+    }
+
+    # set file number
+    epics_put(sprintf("%sFileNumber", ADFILEPV),sprintf("%d", iNum), timeout)
+}'
+
+def ccdget_FileNum() '{
+    local _iNum
+    sleep(0.01)
+    _iNum = epics_get(sprintf("%sFileNumber", ADFILEPV))
+    return _iNum
+}'
+
