@@ -18,6 +18,9 @@ tomo:
   omega_start:   0.0      # degree
   omega_end:     5.0      # degree
   n_frames:      5        # 5 frames -> 1 images
+  ROT_STAGE_FAST_SPEED:      50  # only for fly scan
+  accl:                       3  # only for fly scan
+  slew_speed:                 5  # only for fly scan         
 
 output:        
   filepath:    null       # use testing location
