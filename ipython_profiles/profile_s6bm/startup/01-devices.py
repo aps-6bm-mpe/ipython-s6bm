@@ -107,7 +107,7 @@ class EnsemblePSOFlyDevice(TaxiFlyScanDevice):
     scan_control = Component(EpicsSignal, "scanControl")
 
 # make the fly motor
-psofly = EnsemblePSOFlyDevice("1id:PSOFly:", name="psofly")
+psofly = EnsemblePSOFlyDevice("6bmpreci:eFly:", name="psofly")
 
 
 # -------------
