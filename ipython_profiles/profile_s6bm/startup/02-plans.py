@@ -168,12 +168,12 @@ def tomo_step(config):
     return (yield from scan_closure())
 
 
-# borrowed from 2BM scan plans, might be useful here.
-def motor_set_modulo(motor, modulo):
-    if not 0 <= motor.position < modulo:
-        yield from bps.mv(motor.set_use_switch, 1)
-        yield from bps.mv(motor.user_setpoint, motor.position % modulo)
-        yield from bps.mv(motor.set_use_switch, 0)
+# This section is to reset motor position, in case the motor can keep rotating continuously.
+#def motor_set_modulo(motor, modulo):
+#    if not 0 <= motor.position < modulo:
+#        yield from bps.mv(motor.set_use_switch, 1)
+#        yield from bps.mv(motor.user_setpoint, motor.position % modulo)
+#        yield from bps.mv(motor.set_use_switch, 0)
 
 def tomo_fly(config):
     """
@@ -259,11 +259,11 @@ def tomo_fly(config):
         # 1-4.5 set frame type for an organized HDF5 archive
         yield from bps.mv(det.cam.frame_type, 1)
 
-        # 1-5 quicly reset proc1
-        yield from bps.mv(det.proc1.reset_filter, 1)
+        # 1-5 get array directly from PG1 port
+        yield from bps.mv(det.cam.hdf1.nd_array_port, 'PG1')
+        yield from bps.mv(det.cam.tiff1.nd_array_port, 'PG1')
 
         # 1-6 collect projections
-        yield from motor_set_modulo(preci, 360.0)
 
         # configure the psofly interface
         yield from bps.mv(
@@ -287,6 +287,10 @@ def tomo_fly(config):
         yield from bps.trigger(det, group='fly')
         yield from bps.abs_set(psofly.fly, "Fly", group='fly')
         yield from bps.wait(group='fly')
+                         
+        # fly scan finished. switch image port back
+        yield from bps.mv(det.cam.hdf1.nd_array_port, 'PROC1')
+        yield from bps.mv(det.cam.tiff1.nd_array_port, 'PROC1')                         
 
         # ------------------
         # collect back white
