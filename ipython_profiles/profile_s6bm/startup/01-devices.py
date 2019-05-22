@@ -2,6 +2,7 @@
 _sep = u"🙉"*30
 print(f'{_sep}\nInitializing devices on Python end with {__file__}')
 
+
 # ----
 # Shutter
 from bluesky.suspenders import SuspendFloor
@@ -34,8 +35,10 @@ else:
     suspend_A_shutter = SuspendFloor(A_shutter.pss_state, 1)
     print("---use simulated shutter---")
 
-# ----
+
+# ------
 # Motors
+# -- step motor
 from ophyd import MotorBundle
 from ophyd import Component
 from ophyd import EpicsMotor
@@ -61,8 +64,53 @@ else:
     tomostage.samY = sim.motor
     print("using simulated detectors")
 
+# -- PSOFlyDevice
+from ophyd import EpicsSignal
+from ophyd import Device
+import bluesky.plan_stubs as bps
+class TaxiFlyScanDevice(Device):
+    """
+    BlueSky Device for APS taxi & fly scans
+    
+    Some EPICS fly scans at APS are triggered by a pair of 
+    EPICS busy records. The busy record is set, which triggers 
+    the external controls to do the fly scan and then reset 
+    the busy record. 
+    
+    The first busy is called taxi and is responsible for 
+    preparing the hardware to fly. 
+    The second busy performs the actual fly scan. 
+    In a third (optional) phase, data is collected 
+    from hardware and written to a file.
+    """
+    taxi = Component(EpicsSignal, "taxi", put_complete=True)
+    fly = Component(EpicsSignal, "fly", put_complete=True)
+    
+    def plan(self):
+        yield from bps.mv(self.taxi, self.taxi.enum_strs[1])
+        yield from bps.mv(self.fly, self.fly.enum_strs[1])
 
-# ----
+class EnsemblePSOFlyDevice(TaxiFlyScanDevice):
+    motor_pv_name = Component(EpicsSignalRO, "motorName")
+    start = Component(EpicsSignal, "startPos")
+    end = Component(EpicsSignal, "endPos")
+    slew_speed = Component(EpicsSignal, "slewSpeed")
+
+    # scan_delta: output a trigger pulse when motor moves this increment
+    scan_delta = Component(EpicsSignal, "scanDelta")
+
+    # advanced controls
+    delta_time = Component(EpicsSignalRO, "deltaTime")
+    # detector_setup_time = Component(EpicsSignal, "detSetupTime")
+    # pulse_type = Component(EpicsSignal, "pulseType")
+
+    scan_control = Component(EpicsSignal, "scanControl")
+
+# make the fly motor
+psofly = EnsemblePSOFlyDevice("1id:PSOFly:", name="psofly")
+
+
+# -------------
 # Area Detector
 #   Initialize the area detector here, but allow user to update the results
 #   later
