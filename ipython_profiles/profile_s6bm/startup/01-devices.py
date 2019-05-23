@@ -42,12 +42,18 @@ else:
 from ophyd import MotorBundle
 from ophyd import Component
 from ophyd import EpicsMotor
+from ophyd import sim
 
 class TomoStage(MotorBundle):
     #rotation
-    preci = Component(EpicsMotor, "6bmpreci:m1", name='preci')    
-    samX = Component(EpicsMotor, "6bma1:m19", name='samX')
-    samY = Component(EpicsMotor, "6bma1:m18", name="samY")
+    #preci = Component(EpicsMotor, "6bmpreci:m1", name='preci')    
+    #samX = Component(EpicsMotor, "6bma1:m19", name='samX')
+    #samY = Component(EpicsMotor, "6bma1:m18", name="samY")
+    
+    samX  = Component(EpicsMotor, "1ide1:m34", name='samX')
+    samY  = sim.motor
+    preci = Component(EpicsMotor, "1ide:m9", name='preci')    
+    
 
 print("\nSetting up motors")
 if in_production or in_dryrun:
@@ -107,7 +113,8 @@ class EnsemblePSOFlyDevice(TaxiFlyScanDevice):
     scan_control = Component(EpicsSignal, "scanControl")
 
 # make the fly motor
-psofly = EnsemblePSOFlyDevice("6bmpreci:eFly:", name="psofly")
+#psofly = EnsemblePSOFlyDevice("6bmpreci:eFly:", name="psofly")
+psofly = EnsemblePSOFlyDevice("1ide:hexFly1:", name="psofly")   # for test in 1-ID
 
 
 # -------------
@@ -120,7 +127,7 @@ from pathlib import Path, PureWindowsPath
 
 print("\nSetting up area detector")
 # production control ENV vars
-ADPV_prefix = "1idPG2"   # AreaDetector prefix
+ADPV_prefix = "1idPG3"   # AreaDetector prefix
 
 config_experiment = {
     "OUTPUT_ROOT" : "Y:\\",     # The control os is windows...
@@ -142,19 +149,52 @@ print("***--- read the config dictionary config_experiment for more details")
 
 # make area detector
 from ophyd import AreaDetector
-from ophyd import SingleTrigger
+from ophyd import SingleTrigger, EpicsSignalWithRBV
 from ophyd import ADComponent
 from ophyd import PointGreyDetectorCam
 from ophyd import ProcessPlugin
 from ophyd import TIFFPlugin
 from ophyd import HDF5Plugin
 from ophyd import sim
+import epics
 
+
+class PointGreyDetectorCam6BM(PointGreyDetectorCam):
+    """
+    PointGrey Grasshopper3 cam plugin customizations (properties) 
+    
+    Note: add fields not supported in standard ophyd device
+    
+    """
+    auto_exposure_on_off = ADComponent(EpicsSignalWithRBV, "AutoExposureOnOff")
+    auto_exposure_auto_mode = ADComponent(EpicsSignalWithRBV, "AutoExposureAutoMode")
+    sharpness_on_off = ADComponent(EpicsSignalWithRBV, "SharpnessOnOff")
+    sharpness_auto_mode = ADComponent(EpicsSignalWithRBV, "SharpnessAutoMode")
+    gamma_on_off = ADComponent(EpicsSignalWithRBV, "GammaOnOff")
+    shutter_auto_mode = ADComponent(EpicsSignalWithRBV, "ShutterAutoMode")
+    gain_auto_mode = ADComponent(EpicsSignalWithRBV, "GainAutoMode")
+    trigger_mode_on_off = ADComponent(EpicsSignalWithRBV, "TriggerModeOnOff")
+    trigger_mode_auto_mode = ADComponent(EpicsSignalWithRBV, "TriggerModeAutoMode")
+    trigger_delay_on_off = ADComponent(EpicsSignalWithRBV, "TriggerDelayOnOff")
+    frame_rate_on_off = ADComponent(EpicsSignalWithRBV, "FrameRateOnOff")
+    frame_rate_auto_mode = ADComponent(EpicsSignalWithRBV, "FrameRateAutoMode")
+    # there are other PG3 properties, ignore them for now
+
+
+class HDF5Plugin6BM(HDF5Plugin):
+    """
+    AD HDF5 plugin customizations (properties) 
+    
+    Note: add fields not supported in standard ophyd device
+    
+    """
+    xml_file_name = ADComponent(EpicsSignalWithRBV, "XMLFileName")
+    
 
 class PointGreyDetector6BM(SingleTrigger, AreaDetector):
     """Point Gray area detector used at 6BM"""
     # cam component
-    cam = ADComponent(PointGreyDetectorCam, "cam1:")
+    cam = ADComponent(PointGreyDetectorCam6BM, "cam1:")
     
     # proc plugin
     proc1 = ADComponent(ProcessPlugin, suffix="Proc1:")
@@ -166,7 +206,7 @@ class PointGreyDetector6BM(SingleTrigger, AreaDetector):
         )
 
     hdf1 = ADComponent(
-            HDF5Plugin, 
+            HDF5Plugin6BM, 
             suffix="HDF1:",
         )
 
@@ -183,10 +223,11 @@ config_cam = {
 }
 
 config_proc1 = {
-    "enable":           1,  # toggle on proc1
-    "enable_filter":    1,  # enable filter
-    "num_filter":       5,  # change number_filtered in proc1 (same as nFrame)
-    "reset_filter":     1,  # reset number_filtered
+    "enable":            1,  # toggle on proc1
+    "enable_filter":     1,  # enable filter
+    "auto_reset_filter": 1,  # has to be "Yes"
+    "num_filter":        5,  # change number_filtered in proc1 (same as nFrame)
+    "reset_filter":      1,  # reset number_filtered
 }
 
 config_tiff1 = {
@@ -196,7 +237,7 @@ config_tiff1 = {
     "auto_increment":   "Yes",
     "auto_save":        "Yes",        # turn on file save
     "file_template":    r"%s%s_%06d.tiff",
-    "file_path":        FILE_PATH,    # set file path
+    #"file_path":        FILE_PATH,    # set file path
     "file_name":        FILE_PREFIX,  # img name prefix
 }
 
@@ -207,64 +248,68 @@ config_hdf1 = {
     "auto_increment": "Yes",
     "file_write_mode":  "Capture",     # change write mode
     "file_template":    r"%s%s_%06d.hd5",
-    "file_path":      FILE_PATH,    # set file path
+    #"file_path":      FILE_PATH,    # set file path
     "file_name":      FILE_PREFIX,  # img name prefix
 }
 
-if offline_testmode:
-    det = sim.noisy_det  # use ophyd simulated detector
-    print("***Ophyd virtual detector is used for offline dev")
-else:
+
+try:
     det = PointGreyDetector6BM(f"{ADPV_prefix}:", name='det')
 
     # det.read_attrs.append('tiff1')  # this is very important
-    # use det.read_attrs[-1] = 'hdf1' to switch to HDF5 output
-    
+    # use det.read_attrs[-1] = 'hdf1' to switch to HDF5 output    
     # catch timeout error in case detector not responding
-    try:
-        for k, v in config_cam.items():     det.cam.stage_sigs[k]   = v
-        for k, v in config_proc1.items():   det.proc1.stage_sigs[k] = v
-        for k, v in config_tiff1.items():   det.tiff1.stage_sigs[k] = v
-        for k, v in config_hdf1.items():    det.hdf1.stage_sigs[k]  = v
+    for k, v in config_cam.items():     det.cam.stage_sigs[k]   = v
+    for k, v in config_proc1.items():   det.proc1.stage_sigs[k] = v
+    for k, v in config_tiff1.items():   det.tiff1.stage_sigs[k] = v
+    for k, v in config_hdf1.items():    det.hdf1.stage_sigs[k]  = v
         
-    except TimeoutError as _exc:
-        print(f"{_exc}\n !! Could not connect with area detector {det}")
-
     print(f"***Area Detector {det} is primed.")
     print("***Adjust settings (dict) in")
     print("***--- config_cam")
     print("***--- config_proc1")
     print("***--- config_tiff1")
     print("***--- config_hdf1")
+    # we need to manually setup the PVs to store background and projections
+    # separately in a HDF5 archive
+    # this is the PV we use as the `SaveDest` attribute
+    epics.caput(f"{ADPV_prefix}:cam1:FrameType.ZRST", "/exchange/data_white_pre")
+    epics.caput(f"{ADPV_prefix}:cam1:FrameType.ONST", "/exchange/data")
+    epics.caput(f"{ADPV_prefix}:cam1:FrameType.TWST", "/exchange/data_white_post")
+    epics.caput(f"{ADPV_prefix}:cam1:FrameType.THST", "/exchange/data_dark")
+
+    # ophyd needs this configuration
+    epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.ZRST", "/exchange/data_white_pre")
+    epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.ONST", "/exchange/data")
+    epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.TWST", "/exchange/data_white_post")
+    epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.THST", "/exchange/data_dark")    
+    
+    # provide layout file
+    det.hdf1.xml_file_name.put(str(Path('configs/tomo6bma_layout.xml').absolute()))
+    
     print("***before the acutal scan")
 
     print("***Switch to manual mode for:")
-    print("***--FrameRate")
-    det.cam.frame_rate_auto_mode.put(0)
-    print("***--AcquirePeriod")
-    det.cam.acquire_period_auto_mode.put(0)
+    print("***--Auto exposure")
+    det.cam.auto_exposure_auto_mode.put(0)
+    print("***--Sharpness")    
+    det.cam.sharpness_auto_mode.put(0)
     print("***--Gain")
     det.cam.gain_auto_mode.put(0)
-
+    print("***--FrameRate")
+    det.cam.frame_rate_auto_mode.put(0)
+    #print("***--AcquirePeriod")
+    #det.cam.acquire_period_auto_mode.put(0)
+    
+    # set attributes 
+    det.cam.nd_attributes_file.put(str(Path('configs/PG3_attributes.xml').absolute()))
+    
+except TimeoutError as _exc:
+    print(f"{_exc}\n !! Could not connect with area detector {det}")
+    det = sim.noisy_det  # use ophyd simulated detector
+    print("***Ophyd virtual detector is used instea")
 
 # --
 # ref: 
-# we need to manually setup the PVs to store background and projections
-# separately in a HDF5 archive
-if offline_testmode:
-    pass
-else:
-    import epics
-    # this is the PV we use as the `SaveDest` attribute
-    epics.caput("1idPG2:cam1:FrameType.ZRST", "/exchange/data_white_pre")
-    epics.caput("1idPG2:cam1:FrameType.ONST", "/exchange/data")
-    epics.caput("1idPG2:cam1:FrameType.TWST", "/exchange/data_white_post")
-    epics.caput("1idPG2:cam1:FrameType.THST", "/exchange/data_dark")
-
-    # ophyd needs this configuration
-    epics.caput("1idPG2:cam1:FrameType_RBV.ZRST", "/exchange/data_white_pre")
-    epics.caput("1idPG2:cam1:FrameType_RBV.ONST", "/exchange/data")
-    epics.caput("1idPG2:cam1:FrameType_RBV.TWST", "/exchange/data_white_post")
-    epics.caput("1idPG2:cam1:FrameType_RBV.TWST", "/exchange/data_dark")
 
 print(f"Done with {__file__}\n{_sep}\n")

@@ -28,11 +28,11 @@ def config_output(output_dict, nimages):
         "enable":         1,
         "num_capture":    nimages,
         "file_template":  ".".join([r"%s%s_%06d",output_dict['type'].lower()]),
-        "file_path":      fp,    
+#       "file_path":      fp,    
         "file_name":      fn,
         "capture":        1,
     }.items(): _plg_on.stage_sigs[k] = v
-    _plg_off.stage_sigs['enable'] = 0
+    _plg_off.stage_sigs = {}
 
     # disable HDF5 auto_increment so that we have a single archive
     # NOTE:
@@ -59,9 +59,15 @@ def tomo_step(config):
     n_projections = len(angs)
     total_images  = n_white + n_projections + n_white + n_dark
     
+    fp = config['output']['filepath']
+    
+    # set file_path (workaround before we solve "file_path_RBV" timeout issue 
+    det.tiff1.file_path.put(fp)
+    det.hdf1.file_path.put(fp)
+    
     # step_1: setup output configuration
     config_output(config['output'], total_images)
-
+    
     # step_2: the whole scan
     # NOTE:
     # 1. As of 04/24/2019, the area detector HDF5 plugin does not support
@@ -190,7 +196,7 @@ def tomo_fly(config):
     config = load_config(config) if type(config) != dict else config
 
     # step0: unpack the configuration dict
-    # NOTE: very similar to the fly scan...
+    # NOTE: very similar to the step scan...
     acquire_time = config['tomo']['acquire_time']
     acquire_period = config['tomo']['acquire_period']
     n_frames = config['tomo']['n_frames']
@@ -207,6 +213,11 @@ def tomo_fly(config):
     slew_speed = config['tomo']['slew_speed']
     accl = config['tomo']['accl']
     ROT_STAGE_FAST_SPEED = config['tomo']['ROT_STAGE_FAST_SPEED']
+    
+    # set file_path (workaround before we solve "file_path_RBV" timeout issue (4/23/2019)
+    fp = config['output']['filepath']
+    det.tiff1.file_path.put(fp)
+    det.hdf1.file_path.put(fp)
 
     # step_1: setup output configuration
     config_output(config['output'], total_images)
@@ -260,8 +271,8 @@ def tomo_fly(config):
         yield from bps.mv(det.cam.frame_type, 1)
 
         # 1-5 get array directly from PG1 port
-        yield from bps.mv(det.cam.hdf1.nd_array_port, 'PG1')
-        yield from bps.mv(det.cam.tiff1.nd_array_port, 'PG1')
+        yield from bps.mv(det.hdf1.nd_array_port, 'PG1')
+        yield from bps.mv(det.tiff1.nd_array_port, 'PG1')
 
         # 1-6 collect projections
 
@@ -269,15 +280,15 @@ def tomo_fly(config):
         yield from bps.mv(
             psofly.start,           config['tomo']['omega_start'],
             psofly.end,             config['tomo']['omega_end'],
-            psofly.scan_control,    "Standard",
+#             psofly.scan_control,    "Standard",
             psofly.scan_delta,      config['tomo']['omega_step'],
             psofly.slew_speed,      slew_speed,
-            preci.velocity,         ROT_STAGE_FAST_SPEED,
-            preci.acceleration,     slew_speed/accl,
+#            preci.velocity,         ROT_STAGE_FAST_SPEED,
+#            preci.acceleration,     accl,
             )
         # taxi
         yield from bps.mv(psofly.taxi, "Taxi")
-        yield from bps.mv(preci.velocity, slew_speed)
+
         # ???
         yield from bps.mv(
             det.cam.num_images, n_projections,
@@ -288,9 +299,10 @@ def tomo_fly(config):
         yield from bps.abs_set(psofly.fly, "Fly", group='fly')
         yield from bps.wait(group='fly')
                          
-        # fly scan finished. switch image port back
-        yield from bps.mv(det.cam.hdf1.nd_array_port, 'PROC1')
-        yield from bps.mv(det.cam.tiff1.nd_array_port, 'PROC1')                         
+        # fly scan finished. switch image port and trigger_mode back
+        yield from bps.mv(det.cam.trigger_mode, "Internal")
+        yield from bps.mv(det.hdf1.nd_array_port, 'PROC1')
+        yield from bps.mv(det.tiff1.nd_array_port, 'PROC1')                         
 
         # ------------------
         # collect back white

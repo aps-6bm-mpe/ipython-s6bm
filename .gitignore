@@ -105,6 +105,9 @@ target/
 # IPython
 profile_default/
 ipython_config.py
+ipython_profiles/profile_s6bm/db/
+ipython_profiles/profile_s6bm/history.sqlite
+
 
 # pyenv
 .python-version

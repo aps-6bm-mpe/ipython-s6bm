@@ -8,21 +8,22 @@ tomo:
   type:    step           # [step|fly]
   n_white: 10             # num of white field before and after tomo
   n_dark:  10             # num of dark field images after tomo
-  sample_out_position:
-    samx:  -5             # mm 
+  sample_out_position:    # !!relative to the current position!!
+    samx:  -1             # mm 
     samy:   0             # mm
     preci:  0             # degree, rotation
   acquire_time:   0.05    # sec
   acquire_period: 0.06    # sec, acquire_time+0.01, do not stage this one
-  omega_step:    0.5      # degree
-  omega_start:   0.0      # degree
-  omega_end:     5.0      # degree
-  n_frames:      5        # 5 frames -> 1 images
-  ROT_STAGE_FAST_SPEED:      50  # only for fly scan
-  accl:                       3  # only for fly scan
-  slew_speed:                 5  # only for fly scan         
+  omega_step:     0.5     # degree
+  omega_start:    0.0     # degree
+  omega_end:     10.0     # degree
+  n_frames:       5       # 5 frames -> 1 images
+  # below are for fly_scan only
+  ROT_STAGE_FAST_SPEED:      10  # degree/second,
+  accl:                       3  # second,
+  slew_speed:                 2  # degree/second,  (in the future, this should be calculated from exp_time & step)
 
 output:        
-  filepath:    null       # use testing location
-  fileprefix:  test       # specify file name
-  type:        hdf5       # [tiff|tif, hdf|hdf1|hdf5]
+  filepath:    '/dev/shm/tmp'    # use testing location
+  fileprefix:  'test'       # specify file name
+  type:        'hdf5'       # [tiff|tif, hdf|hdf1|hdf5]
