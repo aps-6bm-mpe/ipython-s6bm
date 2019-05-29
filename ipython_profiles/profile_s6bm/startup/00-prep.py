@@ -66,7 +66,7 @@ if offline_testmode:
     in_production = False
 else:
     in_production = aps.inUserOperations \
-                and (instrument_in_use.get() in (1, "6-BM-A")) \
+                and (instrument_in_use() in (1, "6-BM-A")) \
                 and (not hutch_light_on)
 
 # testing mode, supercede in_production

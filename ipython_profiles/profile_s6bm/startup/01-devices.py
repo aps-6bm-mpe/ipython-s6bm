@@ -46,13 +46,13 @@ from ophyd import sim
 
 class TomoStage(MotorBundle):
     #rotation
-    #preci = Component(EpicsMotor, "6bmpreci:m1", name='preci')    
-    #samX = Component(EpicsMotor, "6bma1:m19", name='samX')
-    #samY = Component(EpicsMotor, "6bma1:m18", name="samY")
+    preci = Component(EpicsMotor, "6bmpreci:m1", name='preci')    
+    samX = Component(EpicsMotor, "6bma1:m19", name='samX')
+    samY = Component(EpicsMotor, "6bma1:m18", name="samY")
     
-    samX  = Component(EpicsMotor, "1ide1:m34", name='samX')
-    samY  = sim.motor
-    preci = Component(EpicsMotor, "1ide:m9", name='preci')    
+    #samX  = Component(EpicsMotor, "1ide1:m34", name='samX')
+    #samY  = sim.motor
+    #preci = Component(EpicsMotor, "1ide:m9", name='preci')    
     
 
 print("\nSetting up motors")
