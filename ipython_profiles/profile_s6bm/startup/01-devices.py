@@ -47,8 +47,9 @@ from ophyd import sim
 class TomoStage(MotorBundle):
     #rotation
     preci = Component(EpicsMotor, "6bmpreci:m1", name='preci')    
-    samX = Component(EpicsMotor, "6bma1:m19", name='samX')
-    samY = Component(EpicsMotor, "6bma1:m18", name="samY")
+    samX  = Component(EpicsMotor, "6bma1:m19", name='samX')
+    ksamx = Component(EpicsMotor, "6bma1:m11", name='ksamx')
+    samY  = Component(EpicsMotor, "6bma1:m18", name="samY")
     
     #samX  = Component(EpicsMotor, "1ide1:m34", name='samX')
     #samY  = sim.motor
@@ -59,16 +60,20 @@ print("\nSetting up motors")
 if in_production or in_dryrun:
     tomostage = TomoStage(name='tomostage')
 
-    samx  = tomostage.samX
-    samy  = tomostage.samY
-    preci = tomostage.preci
-
 else:
-    tomostage = MotorBundle()
+    tomostage = MotorBundle(name="tomostage")
     tomostage.preci = sim.motor
     tomostage.samX = sim.motor
     tomostage.samY = sim.motor
+    tomostage.ksamx = sim.motor
+
     print("using simulated detectors")
+
+
+samx  = tomostage.ksamx
+samy  = tomostage.samY
+preci = tomostage.preci
+
 
 # -- PSOFlyDevice
 from ophyd import EpicsSignal
@@ -113,8 +118,8 @@ class EnsemblePSOFlyDevice(TaxiFlyScanDevice):
     scan_control = Component(EpicsSignal, "scanControl")
 
 # make the fly motor
-#psofly = EnsemblePSOFlyDevice("6bmpreci:eFly:", name="psofly")
-psofly = EnsemblePSOFlyDevice("1ide:hexFly1:", name="psofly")   # for test in 1-ID
+psofly = EnsemblePSOFlyDevice("6bmpreci:eFly:", name="psofly")
+#psofly = EnsemblePSOFlyDevice("1ide:hexFly1:", name="psofly")   # for test in 1-ID
 
 
 # -------------
@@ -127,12 +132,13 @@ from pathlib import Path, PureWindowsPath
 
 print("\nSetting up area detector")
 # production control ENV vars
-ADPV_prefix = "1idPG3"   # AreaDetector prefix
+ADPV_prefix = "1idPG2"   # AreaDetector prefix
 
 config_experiment = {
-    "OUTPUT_ROOT" : "Y:\\",     # The control os is windows...
-    "CYCLE" : "2019-1",
-    "EXPID" : "startup_apr19",
+#    "OUTPUT_ROOT" : "Y:\\",     # The control os is windows...
+    "OUTPUT_ROOT" : "/home/beams/S6BM/user_data/",     # The control os is linux
+    "CYCLE" : "2019-2",
+    "EXPID" : "startup_jun19",
     "USER"  : "tomo",
     'SAMPLE' : "test",
 }
@@ -233,7 +239,7 @@ config_proc1 = {
 config_tiff1 = {
     "enable":           0,            # disable by default
     "nd_array_port":    "PROC1",      # switch port for TIFF plugin
-    "file_write_mode":  "Capture",     # change write mode
+    #"file_write_mode":  "Capture",     # change write mode
     "auto_increment":   "Yes",
     "auto_save":        "Yes",        # turn on file save
     "file_template":    r"%s%s_%06d.tiff",
@@ -246,7 +252,7 @@ config_hdf1 = {
     "nd_array_port":  "PROC1",      # switch port for TIFF plugin
     "auto_save":      "Yes",
     "auto_increment": "Yes",
-    "file_write_mode":  "Capture",     # change write mode
+    #"file_write_mode":  "Stream",     # change write mode
     "file_template":    r"%s%s_%06d.hd5",
     #"file_path":      FILE_PATH,    # set file path
     "file_name":      FILE_PREFIX,  # img name prefix
@@ -273,6 +279,10 @@ try:
     # we need to manually setup the PVs to store background and projections
     # separately in a HDF5 archive
     # this is the PV we use as the `SaveDest` attribute
+    # check the following page for important information
+    # https://github.com/BCDA-APS/use_bluesky/blob/master/notebooks/sandbox/images_darks_flats.ipynb
+    #
+    
     epics.caput(f"{ADPV_prefix}:cam1:FrameType.ZRST", "/exchange/data_white_pre")
     epics.caput(f"{ADPV_prefix}:cam1:FrameType.ONST", "/exchange/data")
     epics.caput(f"{ADPV_prefix}:cam1:FrameType.TWST", "/exchange/data_white_post")
@@ -302,7 +312,7 @@ try:
     #det.cam.acquire_period_auto_mode.put(0)
     
     # set attributes 
-    det.cam.nd_attributes_file.put(str(Path('configs/PG3_attributes.xml').absolute()))
+    det.cam.nd_attributes_file.put(str(Path('configs/PG2_attributes.xml').absolute()))
     
 except TimeoutError as _exc:
     print(f"{_exc}\n !! Could not connect with area detector {det}")

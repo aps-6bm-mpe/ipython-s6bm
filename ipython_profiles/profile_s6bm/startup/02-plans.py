@@ -28,7 +28,7 @@ def config_output(output_dict, nimages):
         "enable":         1,
         "num_capture":    nimages,
         "file_template":  ".".join([r"%s%s_%06d",output_dict['type'].lower()]),
-#       "file_path":      fp,    
+        #"file_path":      fp,    
         "file_name":      fn,
         "capture":        1,
     }.items(): _plg_on.stage_sigs[k] = v
@@ -64,6 +64,9 @@ def tomo_step(config):
     # set file_path (workaround before we solve "file_path_RBV" timeout issue 
     det.tiff1.file_path.put(fp)
     det.hdf1.file_path.put(fp)
+    det.tiff1.file_write_mode.put('Stream')
+    det.hdf1.file_write_mode.put('Stream')
+    
     
     # step_1: setup output configuration
     config_output(config['output'], total_images)
@@ -90,15 +93,15 @@ def tomo_step(config):
         yield from bps.install_suspender(suspend_A_shutter)
 
         # 1-2 move sample out of the way
-        current_samx = samx.position
-        current_samy = samy.position
-        current_preci = preci.position
+        initial_samx = samx.position
+        initial_samy = samy.position
+        initial_preci = preci.position
         dx = config['tomo']['sample_out_position']['samx']
         dy = config['tomo']['sample_out_position']['samy']
-        dr = config['tomo']['sample_out_position']['preci']
-        yield from bps.mv(samx,  current_samx  + dx)
-        yield from bps.mv(samy,  current_samy  + dy)
-        yield from bps.mv(preci, current_preci + dr)
+        r = config['tomo']['sample_out_position']['preci']
+        yield from bps.mv(samx,  initial_samx  + dx)
+        yield from bps.mv(samy,  initial_samy  + dy)
+        yield from bps.mv(preci, r)
 
         # 1-2.5 set frame type for an organized HDF5 archive
         yield from bps.mv(det.cam.frame_type, 0)
@@ -111,11 +114,13 @@ def tomo_step(config):
         yield from bps.mv(det.cam.image_mode, "Multiple")
         yield from bps.mv(det.cam.num_images, n_frames*n_white)
         yield from bps.trigger_and_read([det])
+        yield from bps.mv(det.hdf1.nd_array_port, 'PROC1')
+        yield from bps.mv(det.tiff1.nd_array_port, 'PROC1')   
 
         # 1-4 move sample back
-        yield from bps.mv(samx,  current_samx )
-        yield from bps.mv(samy,  current_samy )
-        yield from bps.mv(preci, current_preci)
+        yield from bps.mv(samx,  initial_samx )
+        yield from bps.mv(samy,  initial_samy )
+        #yield from bps.mv(preci, initial_preci)
 
         # -------------------
         # collect projections
@@ -141,9 +146,9 @@ def tomo_step(config):
         # this will return ALL motors to starting positions, we need a
         # smart way to calculate a shorter trajectory to move sample
         # out of way
-        yield from bps.mv(preci, current_preci + dr)
-        yield from bps.mv(samx,  current_samx  + dx)
-        yield from bps.mv(samy,  current_samy  + dy)
+        yield from bps.mv(preci, r)
+        yield from bps.mv(samx,  initial_samx  + dx)
+        yield from bps.mv(samy,  initial_samy  + dy)
         
         # 1-7.5 set frame type for an organized HDF5 archive
         yield from bps.mv(det.cam.frame_type, 2)
@@ -153,9 +158,9 @@ def tomo_step(config):
         yield from bps.trigger_and_read([det])
 
         # 1-9 move sample back
-        yield from bps.mv(samx,  current_samx )
-        yield from bps.mv(samy,  current_samy )
-        yield from bps.mv(preci, current_preci)
+        yield from bps.mv(samx,  initial_samx )
+        yield from bps.mv(samy,  initial_samy )
+        #yield from bps.mv(preci, initial_preci)
 
         # -----------------
         # collect back dark
@@ -193,13 +198,19 @@ def tomo_fly(config):
     NOTE:
     see config_tomo_fly for key inputs
     """
+    config_tiff1['nd_array_port'] = 'PG1'
+    config_hdf1['nd_array_port']  = 'PG1'
+    
+    
     config = load_config(config) if type(config) != dict else config
 
     # step0: unpack the configuration dict
     # NOTE: very similar to the step scan...
     acquire_time = config['tomo']['acquire_time']
     acquire_period = config['tomo']['acquire_period']
-    n_frames = config['tomo']['n_frames']
+    config_cam['acquire_time'] = acquire_time
+    config_cam['acquire_period'] = acquire_period
+    #n_frames = config['tomo']['n_frames']
     n_white = config['tomo']['n_white']
     n_dark = config['tomo']['n_dark']
     angs = np.arange(
@@ -226,8 +237,8 @@ def tomo_fly(config):
     @bpp.stage_decorator([det])
     @bpp.run_decorator()
     def scan_closure():
-        yield from bps.mv(det.cam.acquire_time, acquire_time)
-        yield from bps.mv(det.cam.acquire_period, acquire_period)
+        #yield from bps.mv(det.cam.acquire_time, acquire_time)
+        #yield from bps.mv(det.cam.acquire_period, acquire_period)
         
         # -------------------
         # collect white field
@@ -237,32 +248,32 @@ def tomo_fly(config):
         yield from bps.install_suspender(suspend_A_shutter)
 
         # 1-2 move sample out of the way
-        current_samx = samx.position
-        current_samy = samy.position
-        current_preci = preci.position
+        initial_samx = samx.position
+        initial_samy = samy.position
+        initial_preci = preci.position
         dx = config['tomo']['sample_out_position']['samx']
         dy = config['tomo']['sample_out_position']['samy']
-        dr = config['tomo']['sample_out_position']['preci']
-        yield from bps.mv(samx,  current_samx  + dx)
-        yield from bps.mv(samy,  current_samy  + dy)
-        yield from bps.mv(preci, current_preci + dr)
+        r = config['tomo']['sample_out_position']['preci']
+        yield from bps.mv(samx,  initial_samx  + dx)
+        yield from bps.mv(samy,  initial_samy  + dy)
+        yield from bps.mv(preci, r)
 
         # 1-2.5 set frame type for an organized HDF5 archive
         yield from bps.mv(det.cam.frame_type, 0)
 
         # 1-3 collect front white field images
-        yield from bps.mv(det.proc1.enable, 1)
-        yield from bps.mv(det.proc1.reset_filter, 1)
-        yield from bps.mv(det.proc1.num_filter, n_frames)
+        #yield from bps.mv(det.proc1.enable, 1)
+        #yield from bps.mv(det.proc1.reset_filter, 1)
+        #yield from bps.mv(det.proc1.num_filter, n_frames)
         yield from bps.mv(det.cam.trigger_mode, "Internal")
         yield from bps.mv(det.cam.image_mode, "Multiple")
-        yield from bps.mv(det.cam.num_images, n_frames*n_white)
+        yield from bps.mv(det.cam.num_images, n_white)
         yield from bps.trigger_and_read([det])
 
         # 1-4 move sample back
-        yield from bps.mv(samx,  current_samx )
-        yield from bps.mv(samy,  current_samy )
-        yield from bps.mv(preci, current_preci)
+        yield from bps.mv(samx,  initial_samx )
+        yield from bps.mv(samy,  initial_samy )
+        #yield from bps.mv(preci, initial_preci)
 
         # -------------------
         # collect projections
@@ -282,7 +293,7 @@ def tomo_fly(config):
             psofly.end,             config['tomo']['omega_end'],
 #             psofly.scan_control,    "Standard",
             psofly.scan_delta,      config['tomo']['omega_step'],
-            psofly.slew_speed,      slew_speed,
+#            psofly.slew_speed,      slew_speed,
 #            preci.velocity,         ROT_STAGE_FAST_SPEED,
 #            preci.acceleration,     accl,
             )
@@ -292,7 +303,8 @@ def tomo_fly(config):
         # ???
         yield from bps.mv(
             det.cam.num_images, n_projections,
-            det.cam.trigger_mode, "Overlapped",
+            #det.cam.trigger_mode, "Overlapped",
+            det.cam.trigger_mode, "Bulb",
             )
         # start the fly scan
         yield from bps.trigger(det, group='fly')
@@ -301,8 +313,8 @@ def tomo_fly(config):
                          
         # fly scan finished. switch image port and trigger_mode back
         yield from bps.mv(det.cam.trigger_mode, "Internal")
-        yield from bps.mv(det.hdf1.nd_array_port, 'PROC1')
-        yield from bps.mv(det.tiff1.nd_array_port, 'PROC1')                         
+        #yield from bps.mv(det.hdf1.nd_array_port, 'PROC1')
+        #yield from bps.mv(det.tiff1.nd_array_port, 'PROC1')                         
 
         # ------------------
         # collect back white
@@ -312,21 +324,21 @@ def tomo_fly(config):
         # this will return ALL motors to starting positions, we need a
         # smart way to calculate a shorter trajectory to move sample
         # out of way
-        yield from bps.mv(preci, current_preci + dr)
-        yield from bps.mv(samx,  current_samx  + dx)
-        yield from bps.mv(samy,  current_samy  + dy)
+        yield from bps.mv(preci, r)
+        yield from bps.mv(samx,  initial_samx  + dx)
+        yield from bps.mv(samy,  initial_samy  + dy)
         
         # 1-7.5 set frame type for an organized HDF5 archive
         yield from bps.mv(det.cam.frame_type, 2)
 
         # 1-8 take the back white
-        yield from bps.mv(det.cam.num_images, n_frames*n_white)
+        yield from bps.mv(det.cam.num_images, n_white)
         yield from bps.trigger_and_read([det])
 
         # 1-9 move sample back
-        yield from bps.mv(samx,  current_samx )
-        yield from bps.mv(samy,  current_samy )
-        yield from bps.mv(preci, current_preci)
+        yield from bps.mv(samx,  initial_samx )
+        yield from bps.mv(samy,  initial_samy )
+        #yield from bps.mv(preci, initial_preci)
 
         # -----------------
         # collect back dark
@@ -339,7 +351,7 @@ def tomo_fly(config):
         yield from bps.mv(det.cam.frame_type, 3)
 
         # 1-11 collect the back dark
-        yield from bps.mv(det.cam.num_images, n_frames*n_dark)
+        yield from bps.mv(det.cam.num_images, n_dark)
         yield from bps.trigger_and_read([det])
 
     return (yield from scan_closure())
