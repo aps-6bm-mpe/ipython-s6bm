@@ -104,3 +104,7 @@ Issue the following command in the terminal to run IPython with pre-configured e
 ```bash
 >> ipython --profile=s6bm
 ```
+
+## Dev note
+
+* Branch v0.01 was developed using standard signal staging and tested.
