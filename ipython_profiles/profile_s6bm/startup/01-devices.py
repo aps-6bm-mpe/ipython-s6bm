@@ -1,44 +1,41 @@
-# define devices used for tomo scan at 6BM
-_sep = u"🙉"*30
-print(f'{_sep}\nInitializing devices on Python end with {__file__}')
-
-
-# ----
-# Shutter
+# ----- Functions for hardware ----- #
 from bluesky.suspenders import SuspendFloor
-print("Setting up Shutter")
-if in_production:
-    # define the real shutter used at 6BMA@APS
-    # NOTE: 
-    #   this requires connection to the hardware, otherwise a connection error will be raised
 
-    A_shutter = APS_devices.ApsPssShutterWithStatus(
+# ------- #
+# shutter #
+# ------- #
+def get_shutter(mode='debug'):
+    """
+    return
+        simulated shutter <-- dryrun, debug
+        acutal shutter    <-- production
+    """
+    import apstools.devices as APS_devices
+    aps = APS_devices.ApsMachineParametersDevice(name="APS")
+
+    if mode.lower() in ['debug', 'dryrun']:
+        A_shutter = APS_devices.SimulatedApsPssShutterWithStatus(name="A_shutter")
+    elif mode.lower() == 'production':
+        A_shutter = APS_devices.ApsPssShutterWithStatus(
             "6bmb1:rShtrA:",
             "PA:06BM:STA_A_FES_OPEN_PL",
             name="A_shutter",
         )
-    A_shutter.pss_state
+        suspend_APS_current = SuspendFloor(aps.current, 2, resume_thresh=10)
+        RE.install_suspender(suspend_APS_current)
+    else:
+        raise ValueError(f"🙉: invalide mode, {mode}")
+    
     # no scans until A_shutter is open
     suspend_A_shutter = SuspendFloor(A_shutter.pss_state, 1)
-    # NOTE:
-    # since tomo scan take dark field images with shutter colosed, the
-    # suspender installation for A_shutter is located in the plan for
-    # granular control.
-    
-    # no scans if aps.current is too low
-    suspend_APS_current = SuspendFloor(aps.current, 2, resume_thresh=10)
-    RE.install_suspender(suspend_APS_current)
-
-else:
-    # for testing during dark time (no beam, shutter closed by APS)
-    A_shutter = APS_devices.SimulatedApsPssShutterWithStatus(name="A_shutter")
-    suspend_A_shutter = SuspendFloor(A_shutter.pss_state, 1)
-    print("---use simulated shutter---")
+    RE.install_suspender(suspend_A_shutter)
+    return A_shutter
+keywords_reserved.append('get_shutter()')
 
 
-# ------
-# Motors
-# -- step motor
+# ----------------- #
+# Motors definition #
+# ----------------- #
 from ophyd import MotorBundle
 from ophyd import Component
 from ophyd import EpicsMotor
@@ -50,33 +47,30 @@ class TomoStage(MotorBundle):
     samX  = Component(EpicsMotor, "6bma1:m19", name='samX')
     ksamx = Component(EpicsMotor, "6bma1:m11", name='ksamx')
     samY  = Component(EpicsMotor, "6bma1:m18", name="samY")
-    
-    #samX  = Component(EpicsMotor, "1ide1:m34", name='samX')
-    #samY  = sim.motor
-    #preci = Component(EpicsMotor, "1ide:m9", name='preci')    
-    
 
-print("\nSetting up motors")
-if in_production or in_dryrun:
-    tomostage = TomoStage(name='tomostage')
-
-else:
-    tomostage = MotorBundle(name="tomostage")
-    tomostage.preci = sim.motor
-    tomostage.samX = sim.motor
-    tomostage.samY = sim.motor
-    tomostage.ksamx = sim.motor
-
-    print("using simulated detectors")
-
-
-samx  = tomostage.ksamx
-samy  = tomostage.samY
-preci = tomostage.preci
+def get_motors(mode="debug"):
+    """
+    sim motor <-- debug
+    aerotech  <-- dryrun, production
+    """
+    if mode.lower() == 'debug':
+        tomostage = TomoStage(name='tomostage')
+    elif mode.lower() in ['dryrun', 'production']:
+        tomostage = MotorBundle(name="tomostage")
+        tomostage.preci = sim.motor
+        tomostage.samX = sim.motor
+        tomostage.samY = sim.motor
+    else:
+        raise ValueError(f"🙉: invalide mode, {mode}")
+    return tomostage
+keywords_reserved.append('get_motors()')
 
 
-# -- PSOFlyDevice
+# ------------ #
+# PSOFlyDevice #
+# ------------ #
 from ophyd import EpicsSignal
+from ophyd import EpicsSignalRO
 from ophyd import Device
 import bluesky.plan_stubs as bps
 class TaxiFlyScanDevice(Device):
@@ -117,43 +111,25 @@ class EnsemblePSOFlyDevice(TaxiFlyScanDevice):
 
     scan_control = Component(EpicsSignal, "scanControl")
 
-# make the fly motor
-psofly = EnsemblePSOFlyDevice("6bmpreci:eFly:", name="psofly")
-#psofly = EnsemblePSOFlyDevice("1ide:hexFly1:", name="psofly")   # for test in 1-ID
+def get_fly_motor(mode='debug'):
+    """
+    sim motor <-- debug
+    fly motor <-- dryrun, production
+    """
+    if mode.lower() == 'debug':
+        psofly = sim.flyer1
+    elif mode.lower() in ['dryrun', 'production']:
+        psofly = EnsemblePSOFlyDevice("6bmpreci:eFly:", name="psofly")
+        #psofly = EnsemblePSOFlyDevice("1ide:hexFly1:", name="psofly")   # for test in 1-ID
+    else:
+        raise ValueError(f"🙉: invalide mode, {mode}")
+    return psofly
+keywords_reserved.append('get_fly_motor()')
 
 
-# -------------
-# Area Detector
-#   Initialize the area detector here, but allow user to update the results
-#   later
-import os
-import datetime
-from pathlib import Path, PureWindowsPath
-
-print("\nSetting up area detector")
-# production control ENV vars
-ADPV_prefix = "1idPG2"   # AreaDetector prefix
-
-config_experiment = {
-#    "OUTPUT_ROOT" : "Y:\\",     # The control os is windows...
-    "OUTPUT_ROOT" : "/home/beams/S6BM/user_data/",     # The control os is linux
-    "CYCLE" : "2019-2",
-    "EXPID" : "startup_jun19",
-    "USER"  : "tomo",
-    'SAMPLE' : "test",
-}
-
-def get_file_path(config_dict=config_experiment):
-    return str(PureWindowsPath(Path("/".join([v for _,v in config_dict.items()])+"/")))+'\\'
-
-FILE_PATH = get_file_path(config_experiment)
-FILE_PREFIX = config_experiment['SAMPLE']
-
-print("***Make sure update FILE_PATH and FILE_PREFIX before experiment")
-print("***--- FILE_PATH can also be generated by passing config_experiment to get_file_path()")
-print("***--- read the config dictionary config_experiment for more details")
-
-# make area detector
+# ------------- #
+# area detector #
+# ------------- #
 from ophyd import AreaDetector
 from ophyd import SingleTrigger, EpicsSignalWithRBV
 from ophyd import ADComponent
@@ -164,14 +140,8 @@ from ophyd import HDF5Plugin
 from ophyd import sim
 import epics
 
-
 class PointGreyDetectorCam6BM(PointGreyDetectorCam):
-    """
-    PointGrey Grasshopper3 cam plugin customizations (properties) 
-    
-    Note: add fields not supported in standard ophyd device
-    
-    """
+    """PointGrey Grasshopper3 cam plugin customizations (properties)"""
     auto_exposure_on_off = ADComponent(EpicsSignalWithRBV, "AutoExposureOnOff")
     auto_exposure_auto_mode = ADComponent(EpicsSignalWithRBV, "AutoExposureAutoMode")
     sharpness_on_off = ADComponent(EpicsSignalWithRBV, "SharpnessOnOff")
@@ -184,142 +154,58 @@ class PointGreyDetectorCam6BM(PointGreyDetectorCam):
     trigger_delay_on_off = ADComponent(EpicsSignalWithRBV, "TriggerDelayOnOff")
     frame_rate_on_off = ADComponent(EpicsSignalWithRBV, "FrameRateOnOff")
     frame_rate_auto_mode = ADComponent(EpicsSignalWithRBV, "FrameRateAutoMode")
-    # there are other PG3 properties, ignore them for now
-
 
 class HDF5Plugin6BM(HDF5Plugin):
-    """
-    AD HDF5 plugin customizations (properties) 
-    
-    Note: add fields not supported in standard ophyd device
-    
-    """
+    """AD HDF5 plugin customizations (properties)"""
     xml_file_name = ADComponent(EpicsSignalWithRBV, "XMLFileName")
-    
 
 class PointGreyDetector6BM(SingleTrigger, AreaDetector):
     """Point Gray area detector used at 6BM"""
     # cam component
     cam = ADComponent(PointGreyDetectorCam6BM, "cam1:")
-    
     # proc plugin
     proc1 = ADComponent(ProcessPlugin, suffix="Proc1:")
-    
     # tiff plugin
-    tiff1 = ADComponent(
-        TIFFPlugin,
-        suffix="TIFF1:",
-        )
+    tiff1 = ADComponent(TIFFPlugin, suffix="TIFF1:")
+    # HDF5 plugin
+    hdf1 = ADComponent(HDF5Plugin6BM, suffix="HDF1:")
 
-    hdf1 = ADComponent(
-            HDF5Plugin6BM, 
-            suffix="HDF1:",
-        )
+def get_detector(mode='debug', ADPV_prefix = "1idPG2"):
+    """
+    sim det  <-- debug
+    PG2      <-- dryrun, production
+    """
+    if mode.lower() == 'debug':
+        det = sim.noisy_det
+    elif mode.lower() in ['dryrun', 'production']:
+        det = PointGreyDetector6BM(f"{ADPV_prefix}:", name='det')
 
-# Area Detector (AD) config block
-# NOTE:  user need to update the entry in these dictionary before
-#        running the experiment
-config_cam = {
-    "num_images":     1,           # number of images (nFrame)
-    "image_mode":     "Multiple",  #
-    "trigger_mode":   "Internal",  #
-    "acquire_time":   0.05,        # exposure time (fExposureTime)
-    "acquire_period": 0.05+0.01,   #
-    "gain":           5,           # detector gain [0~30]
-}
+        # we need to manually setup the PVs to store background and projections
+        # separately in a HDF5 archive
+        # this is the PV we use as the `SaveDest` attribute
+        # check the following page for important information
+        # https://github.com/BCDA-APS/use_bluesky/blob/master/notebooks/sandbox/images_darks_flats.ipynb
+        #
+        epics.caput(f"{ADPV_prefix}:cam1:FrameType.ZRST", "/exchange/data_white_pre")
+        epics.caput(f"{ADPV_prefix}:cam1:FrameType.ONST", "/exchange/data")
+        epics.caput(f"{ADPV_prefix}:cam1:FrameType.TWST", "/exchange/data_white_post")
+        epics.caput(f"{ADPV_prefix}:cam1:FrameType.THST", "/exchange/data_dark")
+        # ophyd needs this configuration
+        epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.ZRST", "/exchange/data_white_pre")
+        epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.ONST", "/exchange/data")
+        epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.TWST", "/exchange/data_white_post")
+        epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.THST", "/exchange/data_dark")
+        # set the layout file for cam
+        det.cam.nd_attributes_file.put(str(Path('configs/PG2_attributes.xml').absolute()))
+        # set attributes for HDF5 plugin
+        det.hdf1.xml_file_name.put(str(Path('configs/tomo6bma_layout.xml').absolute()))
+        # turn off the problematic auto setting in cam
+        det.cam.auto_exposure_auto_mode.put(0)  
+        det.cam.sharpness_auto_mode.put(0)
+        det.cam.gain_auto_mode.put(0)
+        det.cam.frame_rate_auto_mode.put(0)
+    else:
+        raise ValueError(f"🙉: invalide mode, {mode}")
 
-config_proc1 = {
-    "enable":            1,  # toggle on proc1
-    "enable_filter":     1,  # enable filter
-    "auto_reset_filter": 1,  # has to be "Yes"
-    "num_filter":        5,  # change number_filtered in proc1 (same as nFrame)
-    "reset_filter":      1,  # reset number_filtered
-}
-
-config_tiff1 = {
-    "enable":           0,            # disable by default
-    "nd_array_port":    "PROC1",      # switch port for TIFF plugin
-    #"file_write_mode":  "Capture",     # change write mode
-    "auto_increment":   "Yes",
-    "auto_save":        "Yes",        # turn on file save
-    "file_template":    r"%s%s_%06d.tiff",
-    #"file_path":        FILE_PATH,    # set file path
-    "file_name":        FILE_PREFIX,  # img name prefix
-}
-
-config_hdf1 = {
-    "enable":          0,           # disable by default
-    "nd_array_port":  "PROC1",      # switch port for TIFF plugin
-    "auto_save":      "Yes",
-    "auto_increment": "Yes",
-    #"file_write_mode":  "Stream",     # change write mode
-    "file_template":    r"%s%s_%06d.hd5",
-    #"file_path":      FILE_PATH,    # set file path
-    "file_name":      FILE_PREFIX,  # img name prefix
-}
-
-
-try:
-    det = PointGreyDetector6BM(f"{ADPV_prefix}:", name='det')
-
-    # det.read_attrs.append('tiff1')  # this is very important
-    # use det.read_attrs[-1] = 'hdf1' to switch to HDF5 output    
-    # catch timeout error in case detector not responding
-    for k, v in config_cam.items():     det.cam.stage_sigs[k]   = v
-    for k, v in config_proc1.items():   det.proc1.stage_sigs[k] = v
-    for k, v in config_tiff1.items():   det.tiff1.stage_sigs[k] = v
-    for k, v in config_hdf1.items():    det.hdf1.stage_sigs[k]  = v
-        
-    print(f"***Area Detector {det} is primed.")
-    print("***Adjust settings (dict) in")
-    print("***--- config_cam")
-    print("***--- config_proc1")
-    print("***--- config_tiff1")
-    print("***--- config_hdf1")
-    # we need to manually setup the PVs to store background and projections
-    # separately in a HDF5 archive
-    # this is the PV we use as the `SaveDest` attribute
-    # check the following page for important information
-    # https://github.com/BCDA-APS/use_bluesky/blob/master/notebooks/sandbox/images_darks_flats.ipynb
-    #
-    
-    epics.caput(f"{ADPV_prefix}:cam1:FrameType.ZRST", "/exchange/data_white_pre")
-    epics.caput(f"{ADPV_prefix}:cam1:FrameType.ONST", "/exchange/data")
-    epics.caput(f"{ADPV_prefix}:cam1:FrameType.TWST", "/exchange/data_white_post")
-    epics.caput(f"{ADPV_prefix}:cam1:FrameType.THST", "/exchange/data_dark")
-
-    # ophyd needs this configuration
-    epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.ZRST", "/exchange/data_white_pre")
-    epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.ONST", "/exchange/data")
-    epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.TWST", "/exchange/data_white_post")
-    epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.THST", "/exchange/data_dark")    
-    
-    # provide layout file
-    det.hdf1.xml_file_name.put(str(Path('configs/tomo6bma_layout.xml').absolute()))
-    
-    print("***before the acutal scan")
-
-    print("***Switch to manual mode for:")
-    print("***--Auto exposure")
-    det.cam.auto_exposure_auto_mode.put(0)
-    print("***--Sharpness")    
-    det.cam.sharpness_auto_mode.put(0)
-    print("***--Gain")
-    det.cam.gain_auto_mode.put(0)
-    print("***--FrameRate")
-    det.cam.frame_rate_auto_mode.put(0)
-    #print("***--AcquirePeriod")
-    #det.cam.acquire_period_auto_mode.put(0)
-    
-    # set attributes 
-    det.cam.nd_attributes_file.put(str(Path('configs/PG2_attributes.xml').absolute()))
-    
-except TimeoutError as _exc:
-    print(f"{_exc}\n !! Could not connect with area detector {det}")
-    det = sim.noisy_det  # use ophyd simulated detector
-    print("***Ophyd virtual detector is used instea")
-
-# --
-# ref: 
-
-print(f"Done with {__file__}\n{_sep}\n")
+    return det
+keywords_reserved.append('get_detector()')
