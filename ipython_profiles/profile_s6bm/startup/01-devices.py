@@ -26,14 +26,14 @@ def get_shutter(mode='debug'):
         RE.install_suspender(suspend_APS_current)
     else:
         raise ValueError(f"🙉: invalide mode, {mode}")
-    
-    # no scans until A_shutter is open
-    suspend_A_shutter = SuspendFloor(A_shutter.pss_state, 1)
-    RE.install_suspender(suspend_A_shutter)
+
     return A_shutter
 
 A_shutter = get_shutter(mode='debug')
 keywords_vars['A_shutter'] = "shutter instance"
+# no scans until A_shutter is open
+suspend_A_shutter = None  # place holder
+keywords_vars['suspend_A_shutter'] = "no scans until A_shutter is open"
 
 # ----------------- #
 # Motors definition #
