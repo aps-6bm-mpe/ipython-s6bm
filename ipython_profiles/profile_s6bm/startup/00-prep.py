@@ -21,7 +21,9 @@ from datetime import datetime
 # get system info
 HOSTNAME = socket.gethostname() or 'localhost'
 USERNAME = getpass.getuser() or '6-BM-A user'
-keywords_reserved = []  # list of keywords reseved for beamline setup
+
+keywords_vars = {}  # {name: short description}
+keywords_func = {}  # {name: short descciption}
 
 print(f'''
 🐉: Greetings, {USERNAME}@{HOSTNAME}!
@@ -44,12 +46,13 @@ print(f'''
 # ----- Setup base bluesky RunEngine and MongoDB ----- #
 # metadata streamed to MongoDB server over the network
 from databroker import Broker
-metadata_db = Broker.named("mongodb_config"); keywords_reserved.append('metadata_db')
+metadata_db = Broker.named("mongodb_config")
+keywords_vars['metadata_db'] = 'Default metadata handler'
 
 # setup RunEngine
 from bluesky import RunEngine
 from bluesky.callbacks.best_effort import BestEffortCallback
-keywords_reserved.append('getRunEngine()')
+keywords_func['getRunEngine'] = 'Get a bluesky RunEngine'
 def getRunEngine(db=None):
     """
     Return an instance of RunEngine.  It is recommended to have only
@@ -68,7 +71,8 @@ def getRunEngine(db=None):
     RE.md['apstools_VERSION'] = apstools.__version__
     RE.md['SESSION_STARTED'] = datetime.isoformat(datetime.now(), " ")
     return RE
-RE = getRunEngine(); keywords_reserved.append('RE')
+RE = getRunEngine()
+keywords_vars['RE'] = 'Default RunEngine instance'
 
 print(f"""
 🙈: A detault RunEngine, RE:
@@ -80,14 +84,14 @@ print(f"""
 
 
 # ----- Define utility functions ----- #
-keywords_reserved.append('load_config()')
+keywords_func['load_config'] = 'Load configuration file (YAML)'
 def load_config(yamlfile):
     """load yaml to a dict"""
     with open(yamlfile, 'r') as stream:
         _dict = yaml.safe_load(stream)
     return _dict
 
-keywords_reserved.append('instrument_is_in_use()')
+keywords_func['instrument_in_use'] = 'instrument status, manual set on IOC'
 def instrument_in_use():
     """check if the soft IOC for 6BM-A"""
     from ophyd import EpicsSignalRO
@@ -101,7 +105,7 @@ def instrument_in_use():
         print(f"🙈: the instrument is {'' if state else 'not'} in use.")
         return state
 
-keywords_reserved.append('hutch_light_on()')
+keywords_func['hutch_light_on'] = 'Hutch lighting status'
 def hutch_light_on():
     """check PV for hutch lighting"""
     calcs = apstools.synApps_ophyd.userCalcsDevice("6bma1:", name="calcs")
