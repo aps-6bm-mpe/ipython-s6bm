@@ -133,8 +133,7 @@ def get_fly_motor(mode='debug'):
         raise ValueError(f"🙉: invalide mode, {mode}")
     return psofly
 
-psofly = get_fly_motor(mode='debug')  # place holder
-keywords_reserved.append('psofly')
+psofly = get_fly_motor(mode='debug'); keywords_reserved.append('psofly')
 
 
 # ------------- #
