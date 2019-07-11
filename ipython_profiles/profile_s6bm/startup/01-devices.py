@@ -4,6 +4,7 @@ from bluesky.suspenders import SuspendFloor
 # ------- #
 # shutter #
 # ------- #
+keywords_reserved.append('get_shutter()')
 def get_shutter(mode='debug'):
     """
     return
@@ -30,8 +31,8 @@ def get_shutter(mode='debug'):
     suspend_A_shutter = SuspendFloor(A_shutter.pss_state, 1)
     RE.install_suspender(suspend_A_shutter)
     return A_shutter
-keywords_reserved.append('get_shutter()')
 
+A_shutter = get_shutter(mode='debug'); keywords_reserved('A_shutter')
 
 # ----------------- #
 # Motors definition #
@@ -48,6 +49,7 @@ class TomoStage(MotorBundle):
     ksamx = Component(EpicsMotor, "6bma1:m11", name='ksamx')
     samY  = Component(EpicsMotor, "6bma1:m18", name="samY")
 
+keywords_reserved.append('get_motors()')
 def get_motors(mode="debug"):
     """
     sim motor <-- debug
@@ -63,7 +65,12 @@ def get_motors(mode="debug"):
     else:
         raise ValueError(f"🙉: invalide mode, {mode}")
     return tomostage
-keywords_reserved.append('get_motors()')
+
+tomostage = get_motors(mode='debug'); keywords_reserved.append('tomostage')
+preci = tomostage.preci;              keywords_reserved.append('preci')
+samX = tomostage.samX;                keywords_reserved.append('samX')
+ksamx = tomostage.ksamx;              keywords_reserved.append('ksamx')
+samY = tomostage.samY;                keywords_reserved.append('samY')
 
 
 # ------------ #
@@ -111,6 +118,7 @@ class EnsemblePSOFlyDevice(TaxiFlyScanDevice):
 
     scan_control = Component(EpicsSignal, "scanControl")
 
+keywords_reserved.append('get_fly_motor()')
 def get_fly_motor(mode='debug'):
     """
     sim motor <-- debug
@@ -124,7 +132,9 @@ def get_fly_motor(mode='debug'):
     else:
         raise ValueError(f"🙉: invalide mode, {mode}")
     return psofly
-keywords_reserved.append('get_fly_motor()')
+
+psofly = get_fly_motor(mode='debug')  # place holder
+keywords_reserved.append('psofly')
 
 
 # ------------- #
@@ -170,6 +180,7 @@ class PointGreyDetector6BM(SingleTrigger, AreaDetector):
     # HDF5 plugin
     hdf1 = ADComponent(HDF5Plugin6BM, suffix="HDF1:")
 
+keywords_reserved.append('get_detector()')
 def get_detector(mode='debug', ADPV_prefix = "1idPG2"):
     """
     sim det  <-- debug
@@ -208,4 +219,5 @@ def get_detector(mode='debug', ADPV_prefix = "1idPG2"):
         raise ValueError(f"🙉: invalide mode, {mode}")
 
     return det
-keywords_reserved.append('get_detector()')
+
+det = get_detector(mode='debug'); keywords_reserved.append('det')
