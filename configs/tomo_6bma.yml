@@ -15,13 +15,13 @@ tomo:
   acquire_time:   0.10    # sec
   acquire_period: 0.11    # sec, acquire_time+0.01, (not being used in fly)
   omega_step:     0.2     # degree
-  omega_start:  -180.0     # degree
-  omega_end:    -170.0     # degree
+  omega_start:  -180.0    # degree
+  omega_end:    -170.0    # degree
   n_frames:       1       # 5 frames -> 1 images
   # below are for fly_scan only
   ROT_STAGE_FAST_SPEED:       1   # degree/second,
   accl:                       3   # second,
-  slew_speed:                 0.5 # degree/second,  (in the future, this should be calculated from exp_time & step)
+  readout_time:  0.001    # detector readout time
 
 output:        
 #  filepath:    '/home/beams/S6BM/user_data/2019-2/startup_jun19/tomo/'    # use testing location
