@@ -1,3 +1,4 @@
+print(f'Enter {__file__}...')
 # ----- Ipython control config and standard library import ----- #
 import os
 import socket
@@ -9,14 +10,6 @@ import apstools
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from IPython import get_ipython
-# use matplotlib jupyter widget library for interactive
-# plots, i.e. %matplotlib widget
-# NOTE: more details in the installation guide
-# >> conda install -c conda-forge ipympl
-# >> conda install -c conda-forge widgetsnbextension
-get_ipython().run_line_magic('matplotlib', 'widget')  
-plt.ion()
 from datetime import datetime
 # get system info
 HOSTNAME = socket.gethostname() or 'localhost'
@@ -117,3 +110,5 @@ def hutch_light_on():
     finally:
         print(f"🙈: the hutch is {'' if state else 'not'} on.")
     return state
+
+print(f'leaving {__file__}...\n')
