@@ -4,7 +4,7 @@ from bluesky.suspenders import SuspendFloor
 # ------- #
 # shutter #
 # ------- #
-keywords_reserved.append('get_shutter()')
+keywords_func['get_shutter'] = 'Return a connection to a sim/real shutter'
 def get_shutter(mode='debug'):
     """
     return
@@ -32,7 +32,8 @@ def get_shutter(mode='debug'):
     RE.install_suspender(suspend_A_shutter)
     return A_shutter
 
-A_shutter = get_shutter(mode='debug'); keywords_reserved('A_shutter')
+A_shutter = get_shutter(mode='debug')
+keywords_vars['A_shutter'] = "shutter instance"
 
 # ----------------- #
 # Motors definition #
@@ -49,7 +50,7 @@ class TomoStage(MotorBundle):
     ksamx = Component(EpicsMotor, "6bma1:m11", name='ksamx')
     samY  = Component(EpicsMotor, "6bma1:m18", name="samY")
 
-keywords_reserved.append('get_motors()')
+keywords_func['get_motors'] = 'Return a connection to sim/real tomostage motor'
 def get_motors(mode="debug"):
     """
     sim motor <-- debug
@@ -66,11 +67,16 @@ def get_motors(mode="debug"):
         raise ValueError(f"🙉: invalide mode, {mode}")
     return tomostage
 
-tomostage = get_motors(mode='debug'); keywords_reserved.append('tomostage')
-preci = tomostage.preci;              keywords_reserved.append('preci')
-samX = tomostage.samX;                keywords_reserved.append('samX')
-ksamx = tomostage.ksamx;              keywords_reserved.append('ksamx')
-samY = tomostage.samY;                keywords_reserved.append('samY')
+tomostage = get_motors(mode='debug')
+keywords_var['tomostage'] = 'sim/real tomo stage'
+preci = tomostage.preci
+keywords_var['preci'] = 'rotation control'
+samX = tomostage.samX
+keywords_var['samX'] = 'tomo stage x-translation'
+ksamx = tomostage.ksamx
+keywords_var['ksamx'] = '?'
+samY = tomostage.samY
+keywords_var['samY'] = 'tomo stage y-translation'
 
 
 # ------------ #
@@ -118,7 +124,7 @@ class EnsemblePSOFlyDevice(TaxiFlyScanDevice):
 
     scan_control = Component(EpicsSignal, "scanControl")
 
-keywords_reserved.append('get_fly_motor()')
+keywords_func['get_fly_motor'] = 'Return a connection to fly IOC control'
 def get_fly_motor(mode='debug'):
     """
     sim motor <-- debug
@@ -133,7 +139,8 @@ def get_fly_motor(mode='debug'):
         raise ValueError(f"🙉: invalide mode, {mode}")
     return psofly
 
-psofly = get_fly_motor(mode='debug'); keywords_reserved.append('psofly')
+psofly = get_fly_motor(mode='debug')
+keywords_var['psofly'] = 'fly control instance'
 
 
 # ------------- #
@@ -179,7 +186,7 @@ class PointGreyDetector6BM(SingleTrigger, AreaDetector):
     # HDF5 plugin
     hdf1 = ADComponent(HDF5Plugin6BM, suffix="HDF1:")
 
-keywords_reserved.append('get_detector()')
+keywords_func['get_detector'] = 'Return a connection to the detector'
 def get_detector(mode='debug', ADPV_prefix = "1idPG2"):
     """
     sim det  <-- debug
@@ -219,4 +226,5 @@ def get_detector(mode='debug', ADPV_prefix = "1idPG2"):
 
     return det
 
-det = get_detector(mode='debug'); keywords_reserved.append('det')
+det = get_detector(mode='debug')
+keywords_var['det'] = 'Area detector instance'
