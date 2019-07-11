@@ -207,4 +207,13 @@ Temporary Items
 
 # End of https://www.gitignore.io/api/linux,python,windows,jupyternotebook
 
-.vscode
+### VisualStudioCode ###
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+### VisualStudioCode Patch ###
+# Ignore all local history of files
+.history
