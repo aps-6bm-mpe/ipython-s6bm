@@ -1,27 +1,18 @@
 # ----- generalized initialization ----- #
-keywords_reserved.append('init_tomo()')
+keywords_func['init_tomo'] = '(Re)-initialized all devices with given mode'
 def init_tomo(mode='debug', config=None):
     """
     (Re)-initialize all devices based on given mode
         simulated devices <-- debug
         actual devices    <-- dryrun, production
     """
+    global A_shutter
+    global suspend_A_shutter
     global tomostage
     global preci, samX, ksamx, samY 
     global psofly
     global det
 
-    # some quick sanity check production mode
-    import apstools.devices as APS_devices
-    aps = APS_devices.ApsMachineParametersDevice(name="APS")
-    if mode.lower() == 'production':
-        if aps.inUserOperations and (instrument_in_use() in (1, "6-BM-A")) and (not hutch_light_on()):
-            pass
-        else:
-            raise ValueError("Cannot be in production mode!")
-    else:
-        pass
-                    
     # re-init all tomo related devices
     A_shutter = get_shutter(mode=mode)
     tomostage = get_motors(mode=mode) 
@@ -31,6 +22,18 @@ def init_tomo(mode='debug', config=None):
     samY = tomostage.samY               
     psofly = get_fly_motor(mode=mode)
     det = get_detector(mode=mode)
+
+    # some quick sanity check production mode
+    import apstools.devices as APS_devices
+    aps = APS_devices.ApsMachineParametersDevice(name="APS")
+    if mode.lower() == 'production':
+        if aps.inUserOperations and (instrument_in_use() in (1, "6-BM-A")) and (not hutch_light_on()):
+            suspend_A_shutter = SuspendFloor(A_shutter.pss_state, 1)
+            RE.install_suspender(suspend_A_shutter)
+        else:
+            raise ValueError("Cannot be in production mode!")
+    else:
+        pass
 
     # TODO:
     # initialize all values in the dictionary
