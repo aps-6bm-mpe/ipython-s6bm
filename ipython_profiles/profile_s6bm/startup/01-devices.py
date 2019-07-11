@@ -1,3 +1,4 @@
+print(f'Enter {__file__}...')
 # ----- Functions for hardware ----- #
 from bluesky.suspenders import SuspendFloor
 
@@ -68,15 +69,15 @@ def get_motors(mode="debug"):
     return tomostage
 
 tomostage = get_motors(mode='debug')
-keywords_var['tomostage'] = 'sim/real tomo stage'
+keywords_vars['tomostage'] = 'sim/real tomo stage'
 preci = tomostage.preci
-keywords_var['preci'] = 'rotation control'
+keywords_vars['preci'] = 'rotation control'
 samX = tomostage.samX
-keywords_var['samX'] = 'tomo stage x-translation'
+keywords_vars['samX'] = 'tomo stage x-translation'
 ksamx = tomostage.ksamx
-keywords_var['ksamx'] = '?'
+keywords_vars['ksamx'] = '?'
 samY = tomostage.samY
-keywords_var['samY'] = 'tomo stage y-translation'
+keywords_vars['samY'] = 'tomo stage y-translation'
 
 
 # ------------ #
@@ -140,7 +141,7 @@ def get_fly_motor(mode='debug'):
     return psofly
 
 psofly = get_fly_motor(mode='debug')
-keywords_var['psofly'] = 'fly control instance'
+keywords_vars['psofly'] = 'fly control instance'
 
 
 # ------------- #
@@ -227,4 +228,6 @@ def get_detector(mode='debug', ADPV_prefix = "1idPG2"):
     return det
 
 det = get_detector(mode='debug')
-keywords_var['det'] = 'Area detector instance'
+keywords_vars['det'] = 'Area detector instance'
+
+print(f'leaving {__file__}...\n')

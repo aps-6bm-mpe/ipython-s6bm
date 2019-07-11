@@ -1,3 +1,4 @@
+print(f'Enter {__file__}...')
 # ----- prefined plans for 6bma ----- #
 # NOTE:
 #  The signal staging does not work well with the CLI based experiment.
@@ -184,3 +185,5 @@ def tomo_scan(config_exp):
         yield from bps.trigger_and_read([det])
 
     return (yield from scan_closure())
+
+print(f'leaving {__file__}...\n')

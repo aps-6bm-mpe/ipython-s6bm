@@ -69,9 +69,9 @@ keywords_vars['RE'] = 'Default RunEngine instance'
 
 print(f"""
 🙈: A detault RunEngine, RE:
-    >> {RE}
+        {RE}
     is created with the default metadata handler, metadata_db.
-    >> {metadata_db}
+        {metadata_db}
     using function getRunEngine()
 """)
 

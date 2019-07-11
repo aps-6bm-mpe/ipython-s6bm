@@ -1,3 +1,4 @@
+print(f'Enter {__file__}...')
 # ----- generalized initialization ----- #
 keywords_func['init_tomo'] = '(Re)-initialized all devices with given mode'
 def init_tomo(mode='debug', config=None):
@@ -46,3 +47,5 @@ print(f"""
 """)
 
 # TODO: define init for other experiment devices
+
+print(f'leaving {__file__}...\n')
