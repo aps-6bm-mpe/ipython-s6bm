@@ -155,6 +155,7 @@ from ophyd import ProcessPlugin
 from ophyd import TIFFPlugin
 from ophyd import HDF5Plugin
 from ophyd import sim
+from pathlib import Path
 import epics
 
 class PointGreyDetectorCam6BM(PointGreyDetectorCam):
