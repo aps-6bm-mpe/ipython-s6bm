@@ -49,6 +49,7 @@ def tomo_scan(config_exp):
     # directly configure output plugins
     for me in [det.tiff1, det.hdf1]:
         me.file_path.put(fp)
+        me.file_name.put(fn)
         me.file_write_mode.put('Stream')
         me.num_capture.put(total_images)
         me.file_template.put(".".join([r"%s%s_%06d",config['output']['type'].lower()]))
@@ -90,6 +91,8 @@ def tomo_scan(config_exp):
         yield from bps.mv(det.cam.frame_type, 0)
 
         # 1-3 collect front white field images
+        yield from bps.mv(det.hdf1.nd_array_port, 'PROC1')
+        yield from bps.mv(det.tiff1.nd_array_port, 'PROC1')
         yield from bps.mv(det.proc1.enable, 1)
         yield from bps.mv(det.proc1.reset_filter, 1)
         yield from bps.mv(det.proc1.num_filter, n_frames)
@@ -97,8 +100,7 @@ def tomo_scan(config_exp):
         yield from bps.mv(det.cam.image_mode, "Multiple")
         yield from bps.mv(det.cam.num_images, n_frames*n_white)
         yield from bps.trigger_and_read([det])
-        yield from bps.mv(det.hdf1.nd_array_port, 'PROC1')
-        yield from bps.mv(det.tiff1.nd_array_port, 'PROC1')   
+     
 
         # 1-4 move sample back
         yield from bps.mv(samx,  initial_samx )
