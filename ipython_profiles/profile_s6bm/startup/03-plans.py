@@ -132,7 +132,7 @@ def tomo_scan(config_exp):
             )
             # taxi
             yield from bps.mv(psofly.taxi, "Taxi")
-            # ???
+            # setup detector to overlap for fly scan
             yield from bps.mv(
                 det.cam.num_images, n_projections,
                 det.cam.trigger_mode, "Overlapped",
