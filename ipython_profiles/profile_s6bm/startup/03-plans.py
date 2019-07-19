@@ -62,7 +62,7 @@ def tomo_scan(config_exp):
         det.tiff1.enable.put(0)
         det.hdf1.enable.put(1)
     else:
-        raise ValueError(f"Unsupported output type {output_dict['type']}")
+        raise ValueError(f"Unsupported output type {config['output']['type']}")
 
     # step 1: define the scan generator
     @bpp.stage_decorator([det])
