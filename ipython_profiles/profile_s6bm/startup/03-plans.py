@@ -19,7 +19,7 @@ def tomo_scan(config_exp):
 
     NOTE: the input can be a dictionary or a YAML file
     """
-    config_dict = load_config(config_exp) if type(config_exp) != dict else config_exp
+    config = load_config(config_exp) if type(config_exp) != dict else config_exp
 
     # step 0: preparation
     acquire_time = config['tomo']['acquire_time']
@@ -40,8 +40,8 @@ def tomo_scan(config_exp):
     # calculate slew speed for fly scan
     # https://github.com/decarlof/tomo2bm/blob/master/flir/libs/aps2bm_lib.py
     # TODO: considering blue pixels, use 2BM code as ref
-    if config_dict['tomo']['type'].lower() == 'fly':
-        scan_time = acquire_time*(n_projections+config_dict['tomo']['readout_time'])
+    if config['tomo']['type'].lower() == 'fly':
+        scan_time = (acquire_time+config['tomo']['readout_time'])*n_projections
         slew_speed = (angs.max() - angs.min())/scan_time
 
     # NOTE: need to manual take one image to prime each plugin
@@ -54,6 +54,7 @@ def tomo_scan(config_exp):
         me.num_capture.put(total_images)
         me.file_template.put(".".join([r"%s%s_%06d",config['output']['type'].lower()]))
         me.capture.put(1)
+        
     if config['output']['type'] in ['tif', 'tiff']:
         det.tiff1.enable.put(1)
         det.hdf1.enable.put(0)
@@ -64,11 +65,9 @@ def tomo_scan(config_exp):
         raise ValueError(f"Unsupported output type {output_dict['type']}")
 
     # step 1: define the scan generator
+    @bpp.stage_decorator([det])
     @bpp.run_decorator()
     def scan_closure():
-        yield from bps.mv(det.cam.acquire_time, acquire_time)
-        yield from bps.mv(det.cam.acquire_period, acquire_period)
-
         # -------------------
         # collect white field
         # -------------------
@@ -77,14 +76,14 @@ def tomo_scan(config_exp):
         yield from bps.install_suspender(suspend_A_shutter)
 
         # 1-2 move sample out of the way
-        initial_samx = samx.position
-        initial_samy = samy.position
+        initial_samx = samX.position
+        initial_samy = samY.position
         initial_preci = preci.position
-        dx = config['tomo']['sample_out_position']['samx']
-        dy = config['tomo']['sample_out_position']['samy']
+        dx = config['tomo']['sample_out_position']['samX']
+        dy = config['tomo']['sample_out_position']['samY']
         r = config['tomo']['sample_out_position']['preci']
-        yield from bps.mv(samx,  initial_samx  + dx)
-        yield from bps.mv(samy,  initial_samy  + dy)
+        yield from bps.mv(samX,  initial_samx  + dx)
+        yield from bps.mv(samY,  initial_samy  + dy)
         yield from bps.mv(preci, r)
 
         # 1-2.5 set frame type for an organized HDF5 archive
@@ -99,12 +98,14 @@ def tomo_scan(config_exp):
         yield from bps.mv(det.cam.trigger_mode, "Internal")
         yield from bps.mv(det.cam.image_mode, "Multiple")
         yield from bps.mv(det.cam.num_images, n_frames*n_white)
+        yield from bps.mv(det.cam.acquire_time, acquire_time)
+        yield from bps.mv(det.cam.acquire_period, acquire_period)
         yield from bps.trigger_and_read([det])
      
 
         # 1-4 move sample back
-        yield from bps.mv(samx,  initial_samx )
-        yield from bps.mv(samy,  initial_samy )
+        yield from bps.mv(samX,  initial_samx )
+        yield from bps.mv(samY,  initial_samy )
         #yield from bps.mv(preci, initial_preci)
 
         # -------------------
@@ -113,7 +114,7 @@ def tomo_scan(config_exp):
         # 1-5 set frame type for an organized HDF5 archive
         yield from bps.mv(det.cam.frame_type, 1)
         # 1-6 step and fly scan are differnt
-        if config_dict['tomo']['type'].lower() == 'step':
+        if config['tomo']['type'].lower() == 'step':
             yield from bps.mv(det.proc1.reset_filter, 1)
             yield from bps.mv(det.cam.num_images, n_frames)
             # 1-6 collect projections
@@ -121,7 +122,7 @@ def tomo_scan(config_exp):
                 yield from bps.checkpoint()
                 yield from bps.mv(preci, ang)
                 yield from bps.trigger_and_read([det])
-        elif config_dict['tomo']['type'].lower() == 'fly':
+        elif config['tomo']['type'].lower() == 'fly':
             yield from bps.mv(det.hdf1.nd_array_port, 'PG1')
             yield from bps.mv(det.tiff1.nd_array_port, 'PG1')
             yield from bps.mv(
@@ -147,7 +148,7 @@ def tomo_scan(config_exp):
             yield from bps.mv(det.hdf1.nd_array_port, 'PROC1')
             yield from bps.mv(det.tiff1.nd_array_port, 'PROC1')     
         else:
-            raise ValueError(f"Unknown scan type: {config_dict['tomo']['type']}")
+            raise ValueError(f"Unknown scan type: {config['tomo']['type']}")
 
         # ------------------
         # collect back white
@@ -158,8 +159,8 @@ def tomo_scan(config_exp):
         # smart way to calculate a shorter trajectory to move sample
         # out of way
         yield from bps.mv(preci, r)
-        yield from bps.mv(samx,  initial_samx  + dx)
-        yield from bps.mv(samy,  initial_samy  + dy)
+        yield from bps.mv(samX,  initial_samx  + dx)
+        yield from bps.mv(samY,  initial_samy  + dy)
         
         # 1-7.5 set frame type for an organized HDF5 archive
         yield from bps.mv(det.cam.frame_type, 2)
@@ -169,8 +170,8 @@ def tomo_scan(config_exp):
         yield from bps.trigger_and_read([det])
 
         # 1-9 move sample back
-        yield from bps.mv(samx,  initial_samx )
-        yield from bps.mv(samy,  initial_samy )
+        yield from bps.mv(samX,  initial_samx )
+        yield from bps.mv(samY,  initial_samy )
 
         # -----------------
         # collect back dark

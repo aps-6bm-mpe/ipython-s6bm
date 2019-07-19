@@ -1,16 +1,23 @@
 print(f'Enter {__file__}...')
 # ----- Ipython control config and standard library import ----- #
+# NOTE:
+# Do not change the order of import, otherwise it will fail
 import os
+import matplotlib
+import matplotlib.pyplot as plt
+
 import socket
 import getpass
 import yaml
 import bluesky
 import ophyd
 import apstools
-import matplotlib
-import matplotlib.pyplot as plt
+
 import numpy as np
 from datetime import datetime
+
+print("*****")
+
 # get system info
 HOSTNAME = socket.gethostname() or 'localhost'
 USERNAME = getpass.getuser() or '6-BM-A user'
@@ -23,15 +30,16 @@ print(f'''
     I, the mighty 🐉, 
     have imported 
         os
+        matplotlib
+        matplotlib.pyplot as plt <-- interactive, using widget as backend
         socket
         getpass
         yaml
-        matplotlib.pyplot as plt <-- interactive, using widget as backend
-        numpy 
-        datetime
         bluesky
         ophyd
         apstools
+        numpy 
+        datetime
     for you, rejoice.
 ''')
 
@@ -44,7 +52,9 @@ keywords_vars['metadata_db'] = 'Default metadata handler'
 
 # setup RunEngine
 from bluesky import RunEngine
+
 from bluesky.callbacks.best_effort import BestEffortCallback
+
 keywords_func['getRunEngine'] = 'Get a bluesky RunEngine'
 def getRunEngine(db=None):
     """

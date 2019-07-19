@@ -48,7 +48,8 @@ class TomoStage(MotorBundle):
     #rotation
     preci = Component(EpicsMotor, "6bmpreci:m1", name='preci')    
     samX  = Component(EpicsMotor, "6bma1:m19", name='samX')
-    ksamx = Component(EpicsMotor, "6bma1:m11", name='ksamx')
+    ksamX = Component(EpicsMotor, "6bma1:m11", name='ksamX')
+    ksamZ = Component(EpicsMotor, "6bma1:m12", name='ksamZ')
     samY  = Component(EpicsMotor, "6bma1:m18", name="samY")
 
 keywords_func['get_motors'] = 'Return a connection to sim/real tomostage motor'
@@ -57,12 +58,14 @@ def get_motors(mode="debug"):
     sim motor <-- debug
     aerotech  <-- dryrun, production
     """
-    if mode.lower() == 'debug':
+    if mode.lower() in ['dryrun', 'production']:
         tomostage = TomoStage(name='tomostage')
-    elif mode.lower() in ['dryrun', 'production']:
+    elif mode.lower() == 'debug':
         tomostage = MotorBundle(name="tomostage")
         tomostage.preci = sim.motor
         tomostage.samX = sim.motor
+        tomostage.ksamX = sim.motor
+        tomostage.ksamZ = sim.motor
         tomostage.samY = sim.motor
     else:
         raise ValueError(f"🙉: invalide mode, {mode}")
@@ -74,8 +77,10 @@ preci = tomostage.preci
 keywords_vars['preci'] = 'rotation control'
 samX = tomostage.samX
 keywords_vars['samX'] = 'tomo stage x-translation'
-ksamx = tomostage.ksamx
-keywords_vars['ksamx'] = '?'
+ksamX = tomostage.ksamX
+keywords_vars['ksamX'] = 'sample translation above rotation'
+ksamZ = tomostage.ksamZ
+keywords_vars['ksamZ'] = 'sample translation above rotation'
 samY = tomostage.samY
 keywords_vars['samY'] = 'tomo stage y-translation'
 
@@ -215,9 +220,9 @@ def get_detector(mode='debug', ADPV_prefix = "1idPG2"):
         epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.TWST", "/exchange/data_white_post")
         epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.THST", "/exchange/data_dark")
         # set the layout file for cam
-        det.cam.nd_attributes_file.put(str(Path('configs/PG2_attributes.xml').absolute()))
+        det.cam.nd_attributes_file.put(str(Path('PG2_attributes.xml').absolute()))
         # set attributes for HDF5 plugin
-        det.hdf1.xml_file_name.put(str(Path('configs/tomo6bma_layout.xml').absolute()))
+        det.hdf1.xml_file_name.put(str(Path('tomo6bma_layout.xml').absolute()))
         # turn off the problematic auto setting in cam
         det.cam.auto_exposure_auto_mode.put(0)  
         det.cam.sharpness_auto_mode.put(0)

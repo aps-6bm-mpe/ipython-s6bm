@@ -10,7 +10,7 @@ def init_tomo(mode='debug', config=None):
     global A_shutter
     global suspend_A_shutter
     global tomostage
-    global preci, samX, ksamx, samY 
+    global preci, samX, ksamX, ksamZ, samY 
     global psofly
     global det
 
@@ -19,7 +19,8 @@ def init_tomo(mode='debug', config=None):
     tomostage = get_motors(mode=mode) 
     preci = tomostage.preci              
     samX = tomostage.samX               
-    ksamx = tomostage.ksamx    
+    ksamX = tomostage.ksamX
+    ksamZ = tomostage.ksamZ        
     samY = tomostage.samY               
     psofly = get_fly_motor(mode=mode)
     det = get_detector(mode=mode)
@@ -27,7 +28,7 @@ def init_tomo(mode='debug', config=None):
     # some quick sanity check production mode
     import apstools.devices as APS_devices
     aps = APS_devices.ApsMachineParametersDevice(name="APS")
-    if mode.lower() == 'production':
+    if mode.lower() in ['production', 'dryrun']:
         if aps.inUserOperations and (instrument_in_use() in (1, "6-BM-A")) and (not hutch_light_on()):
             suspend_A_shutter = SuspendFloor(A_shutter.pss_state, 1)
             RE.install_suspender(suspend_A_shutter)
