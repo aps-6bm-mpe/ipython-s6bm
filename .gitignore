@@ -105,6 +105,9 @@ target/
 # IPython
 profile_default/
 ipython_config.py
+ipython_profiles/profile_s6bm/db/
+ipython_profiles/profile_s6bm/history.sqlite
+
 
 # pyenv
 .python-version
@@ -203,3 +206,13 @@ Temporary Items
 .apdisk
 
 # End of https://www.gitignore.io/api/linux,python,windows,jupyternotebook
+
+### VisualStudioCode ###
+.vscode/*
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+### VisualStudioCode Patch ###
+# Ignore all local history of files
+.history

@@ -1,0 +1,30 @@
+# NOTE:
+# This is a yaml based scan configuration file that can be directly pass
+# to the tomo_step() function
+# i.e.
+# RE(tomo_step(SCAN_CONFIG.YML))
+
+tomo:
+  type:    fly           # [step|fly]
+  n_white: 5             # num of white field before and after tomo
+  n_dark:  5             # num of dark field images after tomo
+  sample_out_position:    # !!relative to the current position!!
+    samX:  -1             # mm (relative position to initial position)
+    samY:   0             # mm (relative position to initial position)
+    preci: -180           # degree, rotation (absoute position)
+  acquire_time:   0.10    # sec
+  acquire_period: 0.11    # sec, acquire_time+0.01, (not being used in fly)
+  omega_step:     0.2     # degree
+  omega_start:  -180.0    # degree
+  omega_end:    -160.0    # degree
+  n_frames:       1       # 5 frames -> 1 images
+  # below are for fly_scan only
+  ROT_STAGE_FAST_SPEED:       1   # degree/second,
+  accl:                       3   # second,
+  readout_time:  0.001    # detector readout time
+
+output:        
+#  filepath:    '/home/beams/S6BM/user_data/2019-2/startup_jun19/tomo/'    # use testing location
+  filepath:    '/dev/shm/tmp/'    # use testing location
+  fileprefix:  'ttt'       # specify file name
+  type:        'hdf'       # [tiff|tif, hdf|hdf1|hdf5]
