@@ -4,82 +4,39 @@ User account for 6-BM-A using ipython
 
 ## Installation of BlueSky control system
 
-### Install with _conda_
-
-Install bluesky core packages first
-
-> As of 04/17/2019, python3.6 is the prefered version for running BlueSky.
+It is __highly recommended__ to deploy this control system in a virtual environemnt. For example:
 
 ```bash
-conda install bluesky -c lightsource2-tag
+conda create -n bluesky
 ```
 
-then the apstools dependencies
+Switch to the new env 
 
 ```bash
-conda install pyresttable -c prjemian
+conda activate bluesky
 ```
 
-followed by installing apstools
+to install `BlueSky` core packages with
 
 ```bash
-conda install apstools -c aps-anl-dev
+conda install -c conda-forge bluesky
 ```
 
-Before installing the metapackage `jupyter`, it is recommended to pin the package `tornado` to an older version until BlueSky dev team solve the related [issue#1062](https://github.com/NSLS-II/bluesky/issues/1062).
-To do so, create a file named __pinned__ under the directory `CONDA_INSTALL_DIR/env/ENVNAME/conda-meta` with the following content:
+then the `apstools` packages for APS devices.
 
-```bash
-tornado<5
 ```
-
-Then install `jupyter` and `matplotlib` with
-
-```bash
-conda install jupyter matplotlib
-```
-
-For update BlueSky packages, one can always do update with explicit channel name
-
-```bash
-conda update bluesky -c lightsource2-tag
-```
-
-Alternatively, a package configuration file `.condarc` can be placed under `HOME` (single env) or `CONDA_INSTALL_DIR/envs/ENV_NAME` (multi-env) with the following content
-
-```YAML  
-channels:
-    - lightsource2-tag  
-    - lightsource2-dev  
-    - aps-anl-tag  
-    - aps-anl-dev  
-    - prjemian  
-    - defaults  
-    - conda-forge
-```
-
-> NOTE:
-> This is the recommended way to install BlueSky and associated dependencies.
-
-### Install with _pip_
-
-Install bluesky and apstools with pip
-
-```bash
-pip install -U pip
-pip install boltons mongoquery pims pyepics pyRestTable tzlocal jupyter suitcase matplotlib
-pip install git+https://github.com/Nikea/historydict#egg=historydict \
-            git+https://github.com/NSLS-II/amostra#egg=amostra \
-            git+https://github.com/NSLS-II/bluesky#egg=bluesky \
-            git+https://github.com/NSLS-II/databroker#egg=databroker \
-            git+https://github.com/NSLS-II/doct#egg=doct \
-            git+https://github.com/NSLS-II/event-model#egg=event_model \
-            git+https://github.com/NSLS-II/ophyd#egg=ophyd \
-            git+https://github.com/NSLS-II/hklpy#egg=hklpy
 pip install apstools
 ```
 
-Similarly, the package `tornado` need to be downgrade below 5.0 to avoid the runtime error.
+> Due to the hybrid installation source, some packages might be installed via both `conda` and `pip`.
+This is typically not an issue as the latest version should be the same regardless the source.
+However, it is recommended to check the acutal packages being used via `IPython` session should any issue occur.
+
+Some supplementary packages recommended:
+
+```bash
+conda install jupyter jupyterlab
+```
 
 ## Config Meta-data handler (MongoDB)
 
