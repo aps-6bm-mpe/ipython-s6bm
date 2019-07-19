@@ -63,10 +63,10 @@ def get_motors(mode="debug"):
     elif mode.lower() == 'debug':
         tomostage = MotorBundle(name="tomostage")
         tomostage.preci = sim.motor
-        tomostage.samX = sim.motor
+        tomostage.samX  = sim.motor
         tomostage.ksamX = sim.motor
         tomostage.ksamZ = sim.motor
-        tomostage.samY = sim.motor
+        tomostage.samY  = sim.motor
     else:
         raise ValueError(f"🙉: invalide mode, {mode}")
     return tomostage
