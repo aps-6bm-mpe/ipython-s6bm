@@ -8,7 +8,7 @@ class RuntimeMode():
         self.set(mode='debug')
 
     def __repr__(self):
-        return f"Current runtime mode is set to: {self._mode}"
+        return f"Current runtime mode is set to: {self._mode} ['debug', 'dryrun', 'production']"
 
     def set(self, mode='debug', config=None):
         """
@@ -42,14 +42,17 @@ class RuntimeMode():
         # some quick sanity check production mode
         import apstools.devices as APS_devices
         aps = APS_devices.ApsMachineParametersDevice(name="APS")
-        if mode.lower() in ['production', 'dryrun']:
+        suspend_A_shutter = SuspendFloor(A_shutter.pss_state, 1)
+        """
+        if mode.lower() in ['production']:
             if aps.inUserOperations and (instrument_in_use() in (1, "6-BM-A")) and (not hutch_light_on()):
-                suspend_A_shutter = SuspendFloor(A_shutter.pss_state, 1)
+                
                 RE.install_suspender(suspend_A_shutter)
             else:
                 raise ValueError("Cannot be in production mode!")
         else:
             pass
+            """
 
         # TODO:
         # initialize all values in the dictionary

@@ -37,7 +37,7 @@ def tomo_scan(config_exp):
     init_motors_pos['samY' ] = samY.position
     init_motors_pos['preci'] = preci.position
     _RE_abort = RE.abort
-    RE.abort = lambda : customize_abort
+    RE.abort = customize_abort
 
     # step 0: preparation
     acquire_time = config['tomo']['acquire_time']
@@ -76,19 +76,19 @@ def tomo_scan(config_exp):
         #1-1.5 configure output plugins     edited by Jason 07/19/2019
         for me in [det.tiff1, det.hdf1]:
             yield from bps.mv(me.file_path, fp)
-            yield from bps.mv(me.file_name. fn)
-            yield from bps.mv(me.file_write_mode, 'stream')
+            yield from bps.mv(me.file_name, fn)
+            yield from bps.mv(me.file_write_mode, 2)
             yield from bps.mv(me.num_capture, total_images)
-            yield from bps.mv(me.file_template, ".".join([r"%s%s_%06d",config['output']['type'].lower()]))
-            yield from bps.mv(me.capture, 1)    
-        
-        #should we set both output handle to off/0 to initialize?
+            yield from bps.mv(me.file_template, ".".join([r"%s%s_%06d",config['output']['type'].lower()]))    
+
         if config['output']['type'] in ['tif', 'tiff']:
             yield from bps.mv(det.tiff1.enable, 1)
+            yield from bps.mv(det.tiff1.capture, 1)
             yield from bps.mv(det.hdf1.enable, 0)
         elif config['output']['type'] in ['hdf', 'hdf1', 'hdf5']:
             yield from bps.mv(det.tiff1.enable, 0)
             yield from bps.mv(det.hdf1.enable, 1)
+            yield from bps.mv(det.hdf1.capture, 1)
         else:
             raise ValueError(f"Unsupported output type {output_dict['type']}")
 
