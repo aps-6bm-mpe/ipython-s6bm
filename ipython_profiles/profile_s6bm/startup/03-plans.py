@@ -9,6 +9,18 @@ import bluesky.preprocessors as bpp
 import bluesky.plan_stubs    as bps
 from bluesky.simulators import summarize_plan
 
+init_motors_pos = {
+    'samX':  samX.position,
+    'samY':  samY.position,
+    'preci': preci.position,
+}
+
+def customize_abort():
+    RE.abort()
+    samX.mv( init_motors_pos['samX' ])
+    samY.mv( init_motors_pos['samY' ])
+    preci.mv(init_motors_pos['preci'])
+
 
 # ----- step/fly scan plan ----- #
 keywords_func['tomo_scan'] = 'Bluesky scan plans for tomography characterization'
@@ -20,6 +32,12 @@ def tomo_scan(config_exp):
     NOTE: the input can be a dictionary or a YAML file
     """
     config = load_config(config_exp) if type(config_exp) != dict else config_exp
+
+    init_motors_pos['samX' ] = samX.position
+    init_motors_pos['samY' ] = samY.position
+    init_motors_pos['preci'] = preci.position
+    _RE_abort = RE.abort
+    RE.abort = lambda : customize_abort
 
     # step 0: preparation
     acquire_time = config['tomo']['acquire_time']
@@ -43,27 +61,7 @@ def tomo_scan(config_exp):
     if config['tomo']['type'].lower() == 'fly':
         scan_time = (acquire_time+config['tomo']['readout_time'])*n_projections
         slew_speed = (angs.max() - angs.min())/scan_time
-
-    # NOTE: need to manual take one image to prime each plugin
-
-    # directly configure output plugins
-    for me in [det.tiff1, det.hdf1]:
-        me.file_path.put(fp)
-        me.file_name.put(fn)
-        me.file_write_mode.put('Stream')
-        me.num_capture.put(total_images)
-        me.file_template.put(".".join([r"%s%s_%06d",config['output']['type'].lower()]))
-        me.capture.put(1)
-        
-    if config['output']['type'] in ['tif', 'tiff']:
-        det.tiff1.enable.put(1)
-        det.hdf1.enable.put(0)
-    elif config['output']['type'] in ['hdf', 'hdf1', 'hdf5']:
-        det.tiff1.enable.put(0)
-        det.hdf1.enable.put(1)
-    else:
-        raise ValueError(f"Unsupported output type {config['output']['type']}")
-
+    
     # step 1: define the scan generator
     @bpp.stage_decorator([det])
     @bpp.run_decorator()
@@ -75,9 +73,28 @@ def tomo_scan(config_exp):
         yield from bps.mv(A_shutter, 'open')
         yield from bps.install_suspender(suspend_A_shutter)
 
+        #1-1.5 configure output plugins     edited by Jason 07/19/2019
+        for me in [det.tiff1, det.hdf1]:
+            yield from bps.mv(me.file_path, fp)
+            yield from bps.mv(me.file_name. fn)
+            yield from bps.mv(me.file_write_mode, 'stream')
+            yield from bps.mv(me.num_capture, total_images)
+            yield from bps.mv(me.file_template, ".".join([r"%s%s_%06d",config['output']['type'].lower()]))
+            yield from bps.mv(me.capture, 1)    
+        
+        #should we set both output handle to off/0 to initialize?
+        if config['output']['type'] in ['tif', 'tiff']:
+            yield from bps.mv(det.tiff1.enable, 1)
+            yield from bps.mv(det.hdf1.enable, 0)
+        elif config['output']['type'] in ['hdf', 'hdf1', 'hdf5']:
+            yield from bps.mv(det.tiff1.enable, 0)
+            yield from bps.mv(det.hdf1.enable, 1)
+        else:
+            raise ValueError(f"Unsupported output type {output_dict['type']}")
+
         # 1-2 move sample out of the way
-        initial_samx = samX.position
-        initial_samy = samY.position
+        initial_samx  = samX.position
+        initial_samy  = samY.position
         initial_preci = preci.position
         dx = config['tomo']['sample_out_position']['samX']
         dy = config['tomo']['sample_out_position']['samY']
