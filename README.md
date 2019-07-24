@@ -62,6 +62,60 @@ Issue the following command in the terminal to run IPython with pre-configured e
 >> ipython --profile=s6bm
 ```
 
+By default, all devices are initialized to 'debug' mode where only simulated devices are connected.
+To check the current mode, simply do
+
+```bash
+>> mode
+```
+
+or switch to different model with
+
+```bash
+>> mode.set('production')
+```
+
+Currently there are three modes available:
+
+|     |     |
+| --- | --- |
+|__debug__| only connect to simulated ophyd devices |
+|__dryrun__| connect to real devices (PVs) and a simulated shutter |
+|__production__| production mode, ready for data collection|
+
+### Run tomo experiment
+
+The details of a tomography experiment should be specified in a YAML file (see configs/tomo_6bma.yml) for example.
+To run the experiment once, one can simply type
+
+```bash
+>> RE(tomo_scan('my_tomo_exp.yml'))
+```
+
+If you would like to modify certain field on the fly, you can also load the YAML as dictionary using 
+
+```bash
+>> tomo_exp = load_config('my_tomo_exp.yml')
+```
+
+and directly modify different entries in the dict.
+Then you can pass the dict to _RE_ to run.
+
+For example, let's say that we want the first experiment to be a step scan using _tiff_ as output and the second one using fly scan with _HDF5_ as output.
+The following code should work
+
+```bash
+>> mode.set('production')
+>> tomo_exp = load_config('my_tomo_exp.yml')
+>> tomo_exp['tomo']['type'] = 'step'
+>> tomo_exp['output']['type'] = 'tiff'
+>> RE(tomo_scan(tomo_exp))
+...
+>> tomo_exp['tomo']['type'] = 'fly'
+>> tomo_exp['output']['type'] = 'hdf'
+>> RE(tomo_scan(tomo_exp))
+```
+
 ## Dev note
 
 * Branch v0.01 was developed using standard signal staging and tested.
