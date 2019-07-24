@@ -206,4 +206,15 @@ def tomo_scan(config_exp):
 
     return (yield from scan_closure())
 
+
+keywords_func['repeat_exp'] = 'repeat given experiment n times'
+def repeat_exp(plan_func, n=1):
+    """
+    Quick wrapper to repeat certain experiment, e.g.
+    >> RE(repeat_exp(tomo_scan('tomo_scan_config.yml')), 2)
+    """
+    for _ in range(n):
+        yield from plan_func
+
+
 print(f'leaving {__file__}...\n')
