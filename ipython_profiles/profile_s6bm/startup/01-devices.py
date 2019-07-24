@@ -220,9 +220,13 @@ def get_detector(mode='debug', ADPV_prefix = "1idPG2"):
         epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.TWST", "/exchange/data_white_post")
         epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.THST", "/exchange/data_dark")
         # set the layout file for cam
-        det.cam.nd_attributes_file.put(str(Path('PG2_attributes.xml').absolute()))
+        # NOTE: use the __file__ as anchor should resolve the directory issue.
+        _current_fp = str(Path(__file__).parent.absolute())
+        _attrib_fp = os.path.join(_current_fp, '../../../configs/PG2_attributes.xml')
+        det.cam.nd_attributes_file.put(_attrib_fp)
         # set attributes for HDF5 plugin
-        det.hdf1.xml_file_name.put(str(Path('tomo6bma_layout.xml').absolute()))
+        _layout_fp = os.path.join(_current_fp, '../../../configs/tomo6bma_layout.xml')
+        det.hdf1.xml_file_name.put(_layout_fp)
         # turn off the problematic auto setting in cam
         det.cam.auto_exposure_auto_mode.put(0)  
         det.cam.sharpness_auto_mode.put(0)
