@@ -145,7 +145,7 @@ def tomo_scan(config_exp):
             yield from bps.mv(
                 psofly.start,           config['tomo']['omega_start'],
                 psofly.end,             config['tomo']['omega_end'],
-                psofly.scan_delta,      config['tomo']['omega_step'],
+                psofly.scan_delta,      abs(config['tomo']['omega_step']),
                 psofly.slew_speed,      slew_speed,
             )
             # taxi
