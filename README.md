@@ -56,23 +56,30 @@ The environment var `IPYTHONDIR` needs to be set where the profile folder is, or
 
 ### Startup
 
-Issue the following command in the terminal to run IPython with pre-configured environment for Tomo-characterization at 6-BM-A:
+First, activate the BlueSky env if not already
+
+```bash
+>> conda activate bluesky
+```
+
+Then, issue the following command in the terminal to run IPython with pre-configured environment for Tomo-characterization at 6-BM-A:
 
 ```bash
 >> ipython --profile=s6bm
 ```
 
 By default, all devices are initialized to 'debug' mode where only simulated devices are connected.
+
 To check the current mode, simply do
 
 ```bash
 >> mode
 ```
 
-or switch to different model with
+or directly switch to different model with
 
 ```bash
->> mode.set('production')
+>> mode.set(MODE_NAME)
 ```
 
 Currently there are three modes available:
@@ -85,14 +92,14 @@ Currently there are three modes available:
 
 ### Run tomo experiment
 
-The details of a tomography experiment should be specified in a YAML file (see configs/tomo_6bma.yml) for example.
+The details of a tomography experiment should be specified in a YAML file (see `configs/tomo_6bma.yml` for example).
 To run the experiment once, one can simply type
 
 ```bash
 >> RE(tomo_scan('my_tomo_exp.yml'))
 ```
 
-If you would like to modify certain field on the fly, you can also load the YAML as dictionary using 
+If you would like to modify certain field interactively, you can also load the YAML as dictionary using 
 
 ```bash
 >> tomo_exp = load_config('my_tomo_exp.yml')
@@ -106,16 +113,21 @@ The following code should work
 
 ```bash
 >> mode.set('production')
+...# some other prep work before running
 >> tomo_exp = load_config('my_tomo_exp.yml')
 >> tomo_exp['tomo']['type'] = 'step'
 >> tomo_exp['output']['type'] = 'tiff'
 >> RE(tomo_scan(tomo_exp))
-...
+...# some cleaning up for the first experiment 
 >> tomo_exp['tomo']['type'] = 'fly'
 >> tomo_exp['output']['type'] = 'hdf'
 >> RE(tomo_scan(tomo_exp))
+...# some cleaning up for the second experiment
 ```
 
 ## Dev note
 
 * Branch v0.01 was developed using standard signal staging and tested.
+* Current master branch uses a empty stage_sigs to by pass the staging.
+* If the experiment has to be aborted `RE.abort()` due to various reason, you can use `resume_motors_position()` to move motors back to the posiiton before the experiment.
+* To avoid namespace contamination, please use `list_predefined_vars()` and `list_predefined_func()` to check the predefined vars and functions.
