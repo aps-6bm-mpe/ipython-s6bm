@@ -9,14 +9,15 @@ import bluesky.preprocessors as bpp
 import bluesky.plan_stubs    as bps
 from bluesky.simulators import summarize_plan
 
+keywords_vars['init_motors_pos'] = 'dict with cached motor position'
 init_motors_pos = {
     'samX':  samX.position,
     'samY':  samY.position,
     'preci': preci.position,
 }
 
-def customize_abort():
-    RE.abort()
+keywords_func['resume_motors_position'] = 'Move motors back to init position'
+def resume_motors_position():
     samX.mv( init_motors_pos['samX' ])
     samY.mv( init_motors_pos['samY' ])
     preci.mv(init_motors_pos['preci'])
@@ -33,11 +34,10 @@ def tomo_scan(config_exp):
     """
     config = load_config(config_exp) if type(config_exp) != dict else config_exp
 
+    # update the cached motor position in the dict in case exp goes wrong
     init_motors_pos['samX' ] = samX.position
     init_motors_pos['samY' ] = samY.position
     init_motors_pos['preci'] = preci.position
-    _RE_abort = RE.abort
-    RE.abort = customize_abort
 
     # step 0: preparation
     acquire_time = config['tomo']['acquire_time']
