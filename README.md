@@ -4,82 +4,39 @@ User account for 6-BM-A using ipython
 
 ## Installation of BlueSky control system
 
-### Install with _conda_
-
-Install bluesky core packages first
-
-> As of 04/17/2019, python3.6 is the prefered version for running BlueSky.
+It is __highly recommended__ to deploy this control system in a virtual environemnt. For example:
 
 ```bash
-conda install bluesky -c lightsource2-tag
+conda create -n bluesky
 ```
 
-then the apstools dependencies
+Switch to the new env 
 
 ```bash
-conda install pyresttable -c prjemian
+conda activate bluesky
 ```
 
-followed by installing apstools
+to install `BlueSky` core packages with
 
 ```bash
-conda install apstools -c aps-anl-dev
+conda install -c conda-forge bluesky
 ```
 
-Before installing the metapackage `jupyter`, it is recommended to pin the package `tornado` to an older version until BlueSky dev team solve the related [issue#1062](https://github.com/NSLS-II/bluesky/issues/1062).
-To do so, create a file named __pinned__ under the directory `CONDA_INSTALL_DIR/env/ENVNAME/conda-meta` with the following content:
+then the `apstools` packages for APS devices.
 
-```bash
-tornado<5
 ```
-
-Then install `jupyter` and `matplotlib` with
-
-```bash
-conda install jupyter matplotlib
-```
-
-For update BlueSky packages, one can always do update with explicit channel name
-
-```bash
-conda update bluesky -c lightsource2-tag
-```
-
-Alternatively, a package configuration file `.condarc` can be placed under `HOME` (single env) or `CONDA_INSTALL_DIR/envs/ENV_NAME` (multi-env) with the following content
-
-```YAML  
-channels:
-    - lightsource2-tag  
-    - lightsource2-dev  
-    - aps-anl-tag  
-    - aps-anl-dev  
-    - prjemian  
-    - defaults  
-    - conda-forge
-```
-
-> NOTE:
-> This is the recommended way to install BlueSky and associated dependencies.
-
-### Install with _pip_
-
-Install bluesky and apstools with pip
-
-```bash
-pip install -U pip
-pip install boltons mongoquery pims pyepics pyRestTable tzlocal jupyter suitcase matplotlib
-pip install git+https://github.com/Nikea/historydict#egg=historydict \
-            git+https://github.com/NSLS-II/amostra#egg=amostra \
-            git+https://github.com/NSLS-II/bluesky#egg=bluesky \
-            git+https://github.com/NSLS-II/databroker#egg=databroker \
-            git+https://github.com/NSLS-II/doct#egg=doct \
-            git+https://github.com/NSLS-II/event-model#egg=event_model \
-            git+https://github.com/NSLS-II/ophyd#egg=ophyd \
-            git+https://github.com/NSLS-II/hklpy#egg=hklpy
 pip install apstools
 ```
 
-Similarly, the package `tornado` need to be downgrade below 5.0 to avoid the runtime error.
+> Due to the hybrid installation source, some packages might be installed via both `conda` and `pip`.
+This is typically not an issue as the latest version should be the same regardless the source.
+However, it is recommended to check the acutal packages being used via `IPython` session should any issue occur.
+
+Some supplementary packages recommended:
+
+```bash
+conda install jupyter jupyterlab
+```
 
 ## Config Meta-data handler (MongoDB)
 
@@ -99,12 +56,78 @@ The environment var `IPYTHONDIR` needs to be set where the profile folder is, or
 
 ### Startup
 
-Issue the following command in the terminal to run IPython with pre-configured environment for Tomo-characterization at 6-BM-A:
+First, activate the BlueSky env if not already
+
+```bash
+>> conda activate bluesky
+```
+
+Then, issue the following command in the terminal to run IPython with pre-configured environment for Tomo-characterization at 6-BM-A:
 
 ```bash
 >> ipython --profile=s6bm
 ```
 
+By default, all devices are initialized to 'debug' mode where only simulated devices are connected.
+
+To check the current mode, simply do
+
+```bash
+>> mode
+```
+
+or directly switch to different model with
+
+```bash
+>> mode.set(MODE_NAME)
+```
+
+Currently there are three modes available:
+
+|     |     |
+| --- | --- |
+|__debug__| only connect to simulated ophyd devices |
+|__dryrun__| connect to real devices (PVs) and a simulated shutter |
+|__production__| production mode, ready for data collection|
+
+### Run tomo experiment
+
+The details of a tomography experiment should be specified in a YAML file (see `configs/tomo_6bma.yml` for example).
+To run the experiment once, one can simply type
+
+```bash
+>> RE(tomo_scan('my_tomo_exp.yml'))
+```
+
+If you would like to modify certain field interactively, you can also load the YAML as dictionary using 
+
+```bash
+>> tomo_exp = load_config('my_tomo_exp.yml')
+```
+
+and directly modify different entries in the dict.
+Then you can pass the dict to _RE_ to run.
+
+For example, let's say that we want the first experiment to be a step scan using _tiff_ as output and the second one using fly scan with _HDF5_ as output.
+The following code should work
+
+```bash
+>> mode.set('production')
+...# some other prep work before running
+>> tomo_exp = load_config('my_tomo_exp.yml')
+>> tomo_exp['tomo']['type'] = 'step'
+>> tomo_exp['output']['type'] = 'tiff'
+>> RE(tomo_scan(tomo_exp))
+...# some cleaning up for the first experiment 
+>> tomo_exp['tomo']['type'] = 'fly'
+>> tomo_exp['output']['type'] = 'hdf'
+>> RE(tomo_scan(tomo_exp))
+...# some cleaning up for the second experiment
+```
+
 ## Dev note
 
 * Branch v0.01 was developed using standard signal staging and tested.
+* Current master branch uses a empty stage_sigs to by pass the staging.
+* If the experiment has to be aborted `RE.abort()` due to various reason, you can use `resume_motors_position()` to move motors back to the posiiton before the experiment.
+* To avoid namespace contamination, please use `list_predefined_vars()` and `list_predefined_func()` to check the predefined vars and functions.

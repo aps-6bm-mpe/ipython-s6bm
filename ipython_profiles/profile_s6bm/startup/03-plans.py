@@ -9,6 +9,19 @@ import bluesky.preprocessors as bpp
 import bluesky.plan_stubs    as bps
 from bluesky.simulators import summarize_plan
 
+keywords_vars['init_motors_pos'] = 'dict with cached motor position'
+init_motors_pos = {
+    'samX':  samX.position,
+    'samY':  samY.position,
+    'preci': preci.position,
+}
+
+keywords_func['resume_motors_position'] = 'Move motors back to init position'
+def resume_motors_position():
+    samX.mv( init_motors_pos['samX' ])
+    samY.mv( init_motors_pos['samY' ])
+    preci.mv(init_motors_pos['preci'])
+
 
 # ----- step/fly scan plan ----- #
 keywords_func['tomo_scan'] = 'Bluesky scan plans for tomography characterization'
@@ -20,6 +33,11 @@ def tomo_scan(config_exp):
     NOTE: the input can be a dictionary or a YAML file
     """
     config = load_config(config_exp) if type(config_exp) != dict else config_exp
+
+    # update the cached motor position in the dict in case exp goes wrong
+    init_motors_pos['samX' ] = samX.position
+    init_motors_pos['samY' ] = samY.position
+    init_motors_pos['preci'] = preci.position
 
     # step 0: preparation
     acquire_time = config['tomo']['acquire_time']
@@ -43,9 +61,7 @@ def tomo_scan(config_exp):
     if config['tomo']['type'].lower() == 'fly':
         scan_time = (acquire_time+config['tomo']['readout_time'])*n_projections
         slew_speed = (angs.max() - angs.min())/scan_time
-
-    # NOTE: need to manual take one image to prime each plugin
-     
+    
     # step 1: define the scan generator
     @bpp.stage_decorator([det])
     @bpp.run_decorator()
@@ -60,25 +76,25 @@ def tomo_scan(config_exp):
         #1-1.5 configure output plugins     edited by Jason 07/19/2019
         for me in [det.tiff1, det.hdf1]:
             yield from bps.mv(me.file_path, fp)
-            yield from bps.mv(me.file_name. fn)
-            yield from bps.mv(me.file_write_mode, 'stream')
+            yield from bps.mv(me.file_name, fn)
+            yield from bps.mv(me.file_write_mode, 2)
             yield from bps.mv(me.num_capture, total_images)
-            yield from bps.mv(me.file_template, ".".join([r"%s%s_%06d",config['output']['type'].lower()]))
-            yield from bps.mv(me.capture, 1)    
-        
-        #should we set both output handle to off/0 to initialize?
+            yield from bps.mv(me.file_template, ".".join([r"%s%s_%06d",config['output']['type'].lower()]))    
+
         if config['output']['type'] in ['tif', 'tiff']:
             yield from bps.mv(det.tiff1.enable, 1)
+            yield from bps.mv(det.tiff1.capture, 1)
             yield from bps.mv(det.hdf1.enable, 0)
         elif config['output']['type'] in ['hdf', 'hdf1', 'hdf5']:
             yield from bps.mv(det.tiff1.enable, 0)
             yield from bps.mv(det.hdf1.enable, 1)
+            yield from bps.mv(det.hdf1.capture, 1)
         else:
             raise ValueError(f"Unsupported output type {output_dict['type']}")
 
         # 1-2 move sample out of the way
-        initial_samx = samX.position
-        initial_samy = samY.position
+        initial_samx  = samX.position
+        initial_samy  = samY.position
         initial_preci = preci.position
         dx = config['tomo']['sample_out_position']['samX']
         dy = config['tomo']['sample_out_position']['samY']
@@ -129,7 +145,7 @@ def tomo_scan(config_exp):
             yield from bps.mv(
                 psofly.start,           config['tomo']['omega_start'],
                 psofly.end,             config['tomo']['omega_end'],
-                psofly.scan_delta,      config['tomo']['omega_step'],
+                psofly.scan_delta,      abs(config['tomo']['omega_step']),
                 psofly.slew_speed,      slew_speed,
             )
             # taxi
@@ -189,5 +205,16 @@ def tomo_scan(config_exp):
         yield from bps.trigger_and_read([det])
 
     return (yield from scan_closure())
+
+
+keywords_func['repeat_exp'] = 'repeat given experiment n times'
+def repeat_exp(plan_func, n=1):
+    """
+    Quick wrapper to repeat certain experiment, e.g.
+    >> RE(repeat_exp(tomo_scan('tomo_scan_config.yml')), 2)
+    """
+    for _ in range(n):
+        yield from plan_func
+
 
 print(f'leaving {__file__}...\n')

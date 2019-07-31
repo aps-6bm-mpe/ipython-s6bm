@@ -12,12 +12,12 @@ tomo:
     samX:  -1             # mm (relative position to initial position)
     samY:   0             # mm (relative position to initial position)
     preci: -180           # degree, rotation (absoute position)
-  acquire_time:   0.10    # sec
-  acquire_period: 0.11    # sec, acquire_time+0.01, (not being used in fly)
+  acquire_time:   0.050    # sec
+  acquire_period: 0.1    # sec, acquire_time+0.01, (not being used in fly)
   omega_step:     0.2     # degree
   omega_start:  -180.0    # degree
-  omega_end:    -160.0    # degree
-  n_frames:       1       # 5 frames -> 1 images
+  omega_end:     180.0    # degree
+  n_frames:       5       # 5 frames -> 1 images
   # below are for fly_scan only
   ROT_STAGE_FAST_SPEED:       1   # degree/second,
   accl:                       3   # second,
