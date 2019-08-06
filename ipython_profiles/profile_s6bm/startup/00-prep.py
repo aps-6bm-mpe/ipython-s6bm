@@ -40,14 +40,15 @@ print(f'''
         apstools
         numpy 
         datetime
+        databroker
     for you, rejoice.
 ''')
 
 
 # ----- Setup base bluesky RunEngine and MongoDB ----- #
 # metadata streamed to MongoDB server over the network
-from databroker import Broker
-metadata_db = Broker.named("mongodb_config")
+import databroker
+metadata_db = databroker.Broker.named("mongodb_config")
 keywords_vars['metadata_db'] = 'Default metadata handler'
 
 # setup RunEngine
@@ -70,9 +71,12 @@ def getRunEngine(db=None):
     RE.md['pid'] = os.getpid()
     RE.md['login_id'] = USERNAME + '@' + HOSTNAME
     RE.md['versions'] = {}
-    RE.md['versions']['bluesky'] = bluesky.__version__
-    RE.md['versions']['ophyd'] = ophyd.__version__
     RE.md['versions']['apstools'] = apstools.__version__
+    RE.md['versions']['bluesky'] = bluesky.__version__
+    RE.md['versions']['databroker'] = databroker.__version__
+    RE.md['versions']['matplotlib'] = matplotlib.__version__
+    RE.md['versions']['numpy'] = np.__version__
+    RE.md['versions']['ophyd'] = ophyd.__version__
     RE.md['SESSION_STARTED'] = datetime.isoformat(datetime.now(), " ")
     return RE
 RE = getRunEngine()
