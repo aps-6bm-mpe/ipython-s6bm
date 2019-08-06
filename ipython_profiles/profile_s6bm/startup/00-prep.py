@@ -69,9 +69,10 @@ def getRunEngine(db=None):
     RE.md['proposal_id'] = 'internal test'
     RE.md['pid'] = os.getpid()
     RE.md['login_id'] = USERNAME + '@' + HOSTNAME
-    RE.md['BLUESKY_VERSION'] = bluesky.__version__
-    RE.md['OPHYD_VERSION'] = ophyd.__version__
-    RE.md['apstools_VERSION'] = apstools.__version__
+    RE.md['versions'] = {}
+    RE.md['versions']['bluesky'] = bluesky.__version__
+    RE.md['versions']['ophyd'] = ophyd.__version__
+    RE.md['versions']['apstools'] = apstools.__version__
     RE.md['SESSION_STARTED'] = datetime.isoformat(datetime.now(), " ")
     return RE
 RE = getRunEngine()
