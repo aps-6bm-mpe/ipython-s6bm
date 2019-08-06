@@ -63,7 +63,7 @@ def getRunEngine(db=None):
     one RunEngine per session.
     """
     RE = RunEngine({})
-    db = metadata_db if db is None else db
+    db = db or metadata_db
     RE.subscribe(db.insert)
     RE.subscribe(BestEffortCallback())
     RE.md['beamline_id'] = 'APS 6-BM-A'
