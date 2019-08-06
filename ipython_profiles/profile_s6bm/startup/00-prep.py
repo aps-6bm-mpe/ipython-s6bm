@@ -100,12 +100,14 @@ def load_config(yamlfile):
     return _dict
 
 keywords_func['instrument_in_use'] = 'instrument status, manual set on IOC'
+_signal_instrument_in_use = ophyd.EpicsSignalRO(
+    "6bm:instrument_in_use", 
+    name="_signal_instrument_in_use",
+)
 def instrument_in_use():
     """check if the soft IOC for 6BM-A"""
-    from ophyd import EpicsSignalRO
-    tmp = EpicsSignalRO("6bm:instrument_in_use", name="tmp")
     try:
-        state = tmp.get()
+        state = _signal_instrument_in_use.get()
     except TimeoutError:
         state = False
         print("🙈: cannot find this soft IOC PV, please check the settings.")
