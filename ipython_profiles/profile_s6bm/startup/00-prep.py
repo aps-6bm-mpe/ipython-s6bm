@@ -6,15 +6,14 @@ import os
 import matplotlib
 import matplotlib.pyplot as plt
 
-import socket
-import getpass
-import yaml
-import bluesky
-import ophyd
 import apstools
-
-import numpy as np
+import bluesky
 from datetime import datetime
+import getpass
+import numpy as np
+import ophyd
+import socket
+import yaml
 
 print("*****")
 
@@ -32,15 +31,14 @@ print(f'''
         os
         matplotlib
         matplotlib.pyplot as plt <-- interactive, using widget as backend
-        socket
-        getpass
-        yaml
-        bluesky
-        ophyd
         apstools
-        numpy 
+        bluesky
         datetime
-        databroker
+        getpass
+        numpy 
+        ophyd
+        socket
+        yaml     
     for you, rejoice.
 ''')
 
@@ -52,44 +50,25 @@ metadata_db = databroker.Broker.named("mongodb_config")
 keywords_vars['metadata_db'] = 'Default metadata handler'
 
 # setup RunEngine
-from bluesky import RunEngine
 
 from bluesky.callbacks.best_effort import BestEffortCallback
-
-keywords_func['getRunEngine'] = 'Get a bluesky RunEngine'
-def getRunEngine(db=None):
-    """
-    Return an instance of RunEngine.  It is recommended to have only
-    one RunEngine per session.
-    """
-    RE = RunEngine({})
-    db = db or metadata_db
-    RE.subscribe(db.insert)
-    RE.subscribe(BestEffortCallback())
-    RE.md['beamline_id'] = 'APS 6-BM-A'
-    RE.md['proposal_id'] = 'internal test'
-    RE.md['pid'] = os.getpid()
-    RE.md['login_id'] = USERNAME + '@' + HOSTNAME
-    RE.md['versions'] = {}
-    RE.md['versions']['apstools'] = apstools.__version__
-    RE.md['versions']['bluesky'] = bluesky.__version__
-    RE.md['versions']['databroker'] = databroker.__version__
-    RE.md['versions']['matplotlib'] = matplotlib.__version__
-    RE.md['versions']['numpy'] = np.__version__
-    RE.md['versions']['ophyd'] = ophyd.__version__
-    RE.md['SESSION_STARTED'] = datetime.isoformat(datetime.now(), " ")
-    return RE
-RE = getRunEngine()
+RE = bluesky.RunEngine({})
 keywords_vars['RE'] = 'Default RunEngine instance'
 
-print(f"""
-🙈: A detault RunEngine, RE:
-        {RE}
-    is created with the default metadata handler, metadata_db.
-        {metadata_db}
-    using function getRunEngine()
-""")
-
+RE.subscribe(metadata_db.insert)
+RE.subscribe(BestEffortCallback())
+RE.md['beamline_id'] = 'APS 6-BM-A'
+RE.md['proposal_id'] = 'internal test'
+RE.md['pid'] = os.getpid()
+RE.md['login_id'] = USERNAME + '@' + HOSTNAME
+RE.md['versions'] = {}
+RE.md['versions']['apstools'] = apstools.__version__
+RE.md['versions']['bluesky'] = bluesky.__version__
+RE.md['versions']['databroker'] = databroker.__version__
+RE.md['versions']['matplotlib'] = matplotlib.__version__
+RE.md['versions']['numpy'] = np.__version__
+RE.md['versions']['ophyd'] = ophyd.__version__
+RE.md['SESSION_STARTED'] = datetime.isoformat(datetime.now(), " ")
 
 # ----- Define utility functions ----- #
 keywords_func['load_config'] = 'Load configuration file (YAML)'
@@ -112,15 +91,16 @@ def instrument_in_use():
         state = False
         print("🙈: cannot find this soft IOC PV, please check the settings.")
     finally:
-        print(f"🙈: the instrument is {'' if state else 'not'} in use.")
+        print(f"🙈: the instrument is {'' if state else 'not'} in use.")　
         return state
 
 keywords_func['hutch_light_on'] = 'Hutch lighting status'
+_signal_hutch_light_on = apstools.synApps_ophyd.userCalcsDevice("6bma1:", 
+    name="_signal_hutch_light_on")
 def hutch_light_on():
     """check PV for hutch lighting"""
-    calcs = apstools.synApps_ophyd.userCalcsDevice("6bma1:", name="calcs")
     try:
-        state = bool(calcs.calc1.val.get())
+        state = bool(_signal_hutch_light_on.calc1.val.get())
     except TimeoutError:
         state = None
         print("🙈: cannot find this soft IOC PV, please check the settings.")
