@@ -13,6 +13,8 @@ def list_predefined_func():
         print(f"\t{key}:\t{val}")
     print()
 
+apstools.utils.print_RE_md()
+apstools.utils.show_ophyd_symbols()
 list_predefined_vars()
 list_predefined_func()
 
