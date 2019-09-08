@@ -34,4 +34,8 @@ while flag is 1:
 
 print(f'Fly scan {seq:4d} has finished, moving to next step...') 
 seq += 1 
-time.sleep(66)
+if bad_scan ==1:
+	time.sleep(100)
+else:
+	time.sleep(66)
+	
