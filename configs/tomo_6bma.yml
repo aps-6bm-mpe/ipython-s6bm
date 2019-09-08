@@ -3,6 +3,10 @@
 # to the tomo_step() function
 # i.e.
 # RE(tomo_step(SCAN_CONFIG.YML))
+#
+# ##### very important !!  each file plugin(TIFF/HDF5) need to have at least one image to get propor array size info, otherwise RE will fail !!   #####
+# ##### long term solution is to pump one image to each file plugin during initialization of AreaDetector (Sept.2019)
+#
 
 tomo:
   type:    fly           # [step|fly]
@@ -12,16 +16,16 @@ tomo:
     samX:  -1             # mm (relative position to initial position)
     samY:   0             # mm (relative position to initial position)
     preci: -180           # degree, rotation (absoute position)
-  acquire_time:   0.050    # sec
-  acquire_period: 0.1    # sec, acquire_time+0.01, (not being used in fly)
-  omega_step:     0.2     # degree
+  acquire_time:   0.05    # sec
+  acquire_period: 0.06    # sec, acquire_time+0.01, (not being used in fly)
+  omega_step:      0.2     # degree
   omega_start:  -180.0    # degree
   omega_end:     180.0    # degree
-  n_frames:       5       # 5 frames -> 1 images
+  n_frames:       5       # n frames -> 1 images (only work for step scan)
   # below are for fly_scan only
   ROT_STAGE_FAST_SPEED:       1   # degree/second,
   accl:                       3   # second,
-  readout_time:  0.001    # detector readout time
+  readout_time:  0.05    # detector readout time
 
 output:        
 #  filepath:    '/home/beams/S6BM/user_data/2019-2/startup_jun19/tomo/'    # use testing location

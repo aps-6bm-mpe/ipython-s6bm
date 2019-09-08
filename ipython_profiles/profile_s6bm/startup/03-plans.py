@@ -7,6 +7,7 @@ print(f'Enter {__file__}...')
 import bluesky.plans         as bp
 import bluesky.preprocessors as bpp
 import bluesky.plan_stubs    as bps
+import time
 from bluesky.simulators import summarize_plan
 
 init_motors_pos = {
@@ -36,8 +37,8 @@ def tomo_scan(config_exp):
     init_motors_pos['samX' ] = samX.position
     init_motors_pos['samY' ] = samY.position
     init_motors_pos['preci'] = preci.position
-    _RE_abort = RE.abort
-    RE.abort = customize_abort
+    #_RE_abort = RE.abort
+    #RE.abort = customize_abort
 
     # step 0: preparation
     acquire_time = config['tomo']['acquire_time']
@@ -140,12 +141,13 @@ def tomo_scan(config_exp):
                 yield from bps.mv(preci, ang)
                 yield from bps.trigger_and_read([det])
         elif config['tomo']['type'].lower() == 'fly':
+            yield from bps.mv(det.proc1.num_filter, 1)
             yield from bps.mv(det.hdf1.nd_array_port, 'PG1')
             yield from bps.mv(det.tiff1.nd_array_port, 'PG1')
             yield from bps.mv(
                 psofly.start,           config['tomo']['omega_start'],
                 psofly.end,             config['tomo']['omega_end'],
-                psofly.scan_delta,      config['tomo']['omega_step'],
+                psofly.scan_delta,      abs(config['tomo']['omega_step']),
                 psofly.slew_speed,      slew_speed,
             )
             # taxi
@@ -183,6 +185,7 @@ def tomo_scan(config_exp):
         yield from bps.mv(det.cam.frame_type, 2)
 
         # 1-8 take the back white
+        yield from bps.mv(det.proc1.num_filter, n_frames)
         yield from bps.mv(det.cam.num_images, n_frames*n_white)
         yield from bps.trigger_and_read([det])
 
@@ -207,3 +210,13 @@ def tomo_scan(config_exp):
     return (yield from scan_closure())
 
 print(f'leaving {__file__}...\n')
+
+
+def repeat(n): 
+    for i in range(n): 
+        print(f'Run cycle {i+1} of {n} is about to start, you have 5 sec to abort the scan...')
+        print(f'')
+        time.sleep(5.0)        
+        yield from tomo_scan('tomo_6bma.yml')
+        time.sleep(0.1)        
+ 

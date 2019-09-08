@@ -220,9 +220,9 @@ def get_detector(mode='debug', ADPV_prefix = "1idPG2"):
         epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.TWST", "/exchange/data_white_post")
         epics.caput(f"{ADPV_prefix}:cam1:FrameType_RBV.THST", "/exchange/data_dark")
         # set the layout file for cam
-        det.cam.nd_attributes_file.put(str(Path('PG2_attributes.xml').absolute()))
+        det.cam.nd_attributes_file.put(str(Path('configs/PG2_attributes.xml').absolute()))
         # set attributes for HDF5 plugin
-        det.hdf1.xml_file_name.put(str(Path('tomo6bma_layout.xml').absolute()))
+        det.hdf1.xml_file_name.put(str(Path('configs/tomo6bma_layout.xml').absolute()))
         # turn off the problematic auto setting in cam
         det.cam.auto_exposure_auto_mode.put(0)  
         det.cam.sharpness_auto_mode.put(0)
