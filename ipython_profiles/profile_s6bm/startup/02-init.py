@@ -52,7 +52,7 @@ class RuntimeMode():
                 raise ValueError("Cannot be in production mode!")
         else:
             pass
-            """
+        """
 
         # TODO:
         # initialize all values in the dictionary

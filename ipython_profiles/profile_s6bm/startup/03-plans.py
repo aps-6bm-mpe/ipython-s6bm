@@ -10,14 +10,15 @@ import bluesky.plan_stubs    as bps
 import time
 from bluesky.simulators import summarize_plan
 
+keywords_vars['init_motors_pos'] = 'dict with cached motor position'
 init_motors_pos = {
     'samX':  samX.position,
     'samY':  samY.position,
     'preci': preci.position,
 }
 
-def customize_abort():
-    RE.abort()
+keywords_func['resume_motors_position'] = 'Move motors back to init position'
+def resume_motors_position():
     samX.mv( init_motors_pos['samX' ])
     samY.mv( init_motors_pos['samY' ])
     preci.mv(init_motors_pos['preci'])
@@ -34,11 +35,10 @@ def tomo_scan(config_exp):
     """
     config = load_config(config_exp) if type(config_exp) != dict else config_exp
 
+    # update the cached motor position in the dict in case exp goes wrong
     init_motors_pos['samX' ] = samX.position
     init_motors_pos['samY' ] = samY.position
     init_motors_pos['preci'] = preci.position
-    #_RE_abort = RE.abort
-    #RE.abort = customize_abort
 
     # step 0: preparation
     acquire_time = config['tomo']['acquire_time']
@@ -208,6 +208,17 @@ def tomo_scan(config_exp):
         yield from bps.trigger_and_read([det])
 
     return (yield from scan_closure())
+
+
+keywords_func['repeat_exp'] = 'repeat given experiment n times'
+def repeat_exp(plan_func, n=1):
+    """
+    Quick wrapper to repeat certain experiment, e.g.
+    >> RE(repeat_exp(tomo_scan('tomo_scan_config.yml')), 2)
+    """
+    for _ in range(n):
+        yield from plan_func
+
 
 print(f'leaving {__file__}...\n')
 
