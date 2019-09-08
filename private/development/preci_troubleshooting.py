@@ -17,7 +17,7 @@ while flag is 1:
         t0 = time.time()
         bad_scan = 0
         if i == 0: 
-            print(f'Fly scan {seq: 4d} is ongoing, {counter} images collected') 
+            print(f'Fly scan {seq: 4d} has started, {counter} images collected') 
         i += 1 
         time.sleep(5) 
         while (counterpv.get() - counter) == 0 and campv.get() == 3:
