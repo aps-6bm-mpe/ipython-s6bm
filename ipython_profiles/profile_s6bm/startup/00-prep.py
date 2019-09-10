@@ -40,14 +40,15 @@ print(f'''
         apstools
         numpy 
         datetime
+        databroker
     for you, rejoice.
 ''')
 
 
 # ----- Setup base bluesky RunEngine and MongoDB ----- #
 # metadata streamed to MongoDB server over the network
-from databroker import Broker
-metadata_db = Broker.named("mongodb_config")
+import databroker
+metadata_db = databroker.Broker.named("mongodb_config")
 keywords_vars['metadata_db'] = 'Default metadata handler'
 
 # setup RunEngine
@@ -62,16 +63,20 @@ def getRunEngine(db=None):
     one RunEngine per session.
     """
     RE = RunEngine({})
-    db = metadata_db if db is None else db
+    db = db or metadata_db
     RE.subscribe(db.insert)
     RE.subscribe(BestEffortCallback())
     RE.md['beamline_id'] = 'APS 6-BM-A'
     RE.md['proposal_id'] = 'internal test'
     RE.md['pid'] = os.getpid()
     RE.md['login_id'] = USERNAME + '@' + HOSTNAME
-    RE.md['BLUESKY_VERSION'] = bluesky.__version__
-    RE.md['OPHYD_VERSION'] = ophyd.__version__
-    RE.md['apstools_VERSION'] = apstools.__version__
+    RE.md['versions'] = {}
+    RE.md['versions']['apstools'] = apstools.__version__
+    RE.md['versions']['bluesky'] = bluesky.__version__
+    RE.md['versions']['databroker'] = databroker.__version__
+    RE.md['versions']['matplotlib'] = matplotlib.__version__
+    RE.md['versions']['numpy'] = np.__version__
+    RE.md['versions']['ophyd'] = ophyd.__version__
     RE.md['SESSION_STARTED'] = datetime.isoformat(datetime.now(), " ")
     return RE
 RE = getRunEngine()
@@ -95,12 +100,14 @@ def load_config(yamlfile):
     return _dict
 
 keywords_func['instrument_in_use'] = 'instrument status, manual set on IOC'
+_signal_instrument_in_use = ophyd.EpicsSignalRO(
+    "6bm:instrument_in_use", 
+    name="_signal_instrument_in_use",
+)
 def instrument_in_use():
     """check if the soft IOC for 6BM-A"""
-    from ophyd import EpicsSignalRO
-    tmp = EpicsSignalRO("6bm:instrument_in_use", name="tmp")
     try:
-        state = tmp.get()
+        state = _signal_instrument_in_use.get()
     except TimeoutError:
         state = False
         print("🙈: cannot find this soft IOC PV, please check the settings.")
