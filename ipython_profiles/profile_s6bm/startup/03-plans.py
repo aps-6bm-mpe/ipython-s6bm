@@ -61,7 +61,7 @@ def tomo_scan(config_exp):
     # TODO: considering blue pixels, use 2BM code as ref
     if config['tomo']['type'].lower() == 'fly':
         scan_time = (acquire_time+config['tomo']['readout_time'])*n_projections
-        slew_speed = (angs.max() - angs.min())/scan_time
+        slew_speed = np.around((angs.max() - angs.min())/scan_time, decimals=4)
     
     # step 1: define the scan generator
     @bpp.stage_decorator([det])
