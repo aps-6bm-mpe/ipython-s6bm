@@ -85,13 +85,19 @@ samY = tomostage.samY
 keywords_vars['samY'] = 'tomo stage y-translation'
 
 
+
+
 # ------------ #
 # PSOFlyDevice #
 # ------------ #
 from ophyd import EpicsSignal
 from ophyd import EpicsSignalRO
-from ophyd import Device
+from ophyd import Device, DeviceStatus
 import bluesky.plan_stubs as bps
+from bluesky.utils import FailedStatus
+
+import time
+
 class TaxiFlyScanDevice(Device):
     """
     BlueSky Device for APS taxi & fly scans
@@ -109,13 +115,17 @@ class TaxiFlyScanDevice(Device):
     """
     taxi = Component(EpicsSignal, "taxi", put_complete=True)
     fly = Component(EpicsSignal, "fly", put_complete=True)
-    
-    def plan(self):
-        yield from bps.mv(self.taxi, self.taxi.enum_strs[1])
-        yield from bps.mv(self.fly, self.fly.enum_strs[1])
+    expected_triggers = Component(EpicsSignalRO, "calcNumTriggers")
+    actual_triggers = Component(EpicsSignalRO, "numTrigsSent")
 
+class NotEnoughTriggers(Exception):
+    def __init__(self, expected, actual):
+        self.expected = expected
+        self.actual = actual
+        super().__init__()
+        
 class EnsemblePSOFlyDevice(TaxiFlyScanDevice):
-    motor_pv_name = Component(EpicsSignalRO, "motorName")
+    motor_rbv = Component(EpicsSignalRO, "motorRBV")
     start = Component(EpicsSignal, "startPos")
     end = Component(EpicsSignal, "endPos")
     slew_speed = Component(EpicsSignal, "slewSpeed")
@@ -129,6 +139,53 @@ class EnsemblePSOFlyDevice(TaxiFlyScanDevice):
     # pulse_type = Component(EpicsSignal, "pulseType")
 
     scan_control = Component(EpicsSignal, "scanControl")
+    
+    def complete(self):
+        print("complete()")
+        expected_triggers = self.expected_triggers.get()
+        start = self.start.get()
+        end = self.end.get()
+        positive = end > start
+        status = DeviceStatus(self)
+        print(f'start={start:.3}, end={end:.3}, positive={positive}')
+        
+        def check_triggers():
+            if self.actual_triggers.get() != expected_triggers:
+                status._finished(success=False)
+                
+        def callback(value, old_value, **kwargs):
+            # status._finished(success=False)
+            if (positive and value > end) or ((not positive) and value < end):
+                print('Motion profile done.  Waiting, then checking triggers.')
+                time.sleep(5)  # grace period for triggers to finish
+                success = self.actual_triggers.get() == expected_triggers
+                if success:
+                    print("Fly scan completion was never confirmed, but we have enough trigger. Finishing successfully...")
+                    status._finished(success=True)
+                else:
+                    print("Not enough triggers received. Stopping with failed status.")
+                    status._finished(success=False)
+                self.motor_rbv.clear_sub(callback)
+                
+        # When we get put-completion from the SSEQ record,
+        # validate that we have the correct number of triggers immediately.
+        # If we do not, finish with failure.
+        fly_status = self.fly.set(self.fly.enum_strs[1])
+        fly_status.add_callback(check_triggers)
+        # Watch the motor readback, which is expected to provide readings past it
+        # setpoint / destination. Once it reaches its destination, wait for some
+        # interval and then fail if 
+        self.motor_rbv.subscribe(callback)
+        
+        return status
+        
+    def plan(self):
+        print("plan() start")
+        try:
+            yield from bps.complete(self, wait=True)
+        except FailedStatus:
+            raise NotEnoughTriggers(self.expected_triggers.get(), self.actual_triggers.get())
+        print("plan() end")
 
 keywords_func['get_fly_motor'] = 'Return a connection to fly IOC control'
 def get_fly_motor(mode='debug'):

@@ -21,7 +21,7 @@ tomo:
   omega_step:      0.2     # degree
   omega_start:  -180.0    # degree
   omega_end:     180.0    # degree
-  n_frames:       5       # n frames -> 1 images (only work for step scan)
+  n_frames:       2       # n frames -> 1 images (only work for step scan)
   # below are for fly_scan only
   ROT_STAGE_FAST_SPEED:       1   # degree/second,
   accl:                       3   # second,

@@ -65,12 +65,12 @@ def tomo_scan(config_exp):
     
     # step 1: define the scan generator
     @bpp.stage_decorator([det])
-    @bpp.run_decorator()
     def scan_closure():
         # -------------------
         # collect white field
         # -------------------
         # 1-1 monitor shutter status, auto-puase scan if beam is lost
+        yield from bps.open_run()
         yield from bps.mv(A_shutter, 'open')
         yield from bps.install_suspender(suspend_A_shutter)
 
@@ -158,10 +158,18 @@ def tomo_scan(config_exp):
                 det.cam.trigger_mode, "Overlapped",
             )
             # start the fly scan
-            yield from bps.trigger(det, group='fly')
-            yield from bps.abs_set(psofly.fly, "Fly", group='fly')
-            yield from bps.wait(group='fly')
-                         
+            print("before trigger")
+            yield from bps.trigger(det, group='trigger')
+            print("waiting for trigger")
+            # yield from bps.wait(group='trigger')
+            print("before plan()")
+            try:
+                yield from psofly.plan()
+            except NotEnoughTriggers as err:
+                reason=(f"{err.expected:.0f} were expected but {err.actual:.0f} were received.")
+                yield from bps.close_run('fail', reason=reason)
+                return  # short-circuit
+              
             # fly scan finished. switch image port and trigger_mode back
             yield from bps.mv(det.cam.trigger_mode, "Internal")
             yield from bps.mv(det.hdf1.nd_array_port, 'PROC1')
@@ -206,6 +214,7 @@ def tomo_scan(config_exp):
         # 1-11 collect the back dark
         yield from bps.mv(det.cam.num_images, n_frames*n_dark)
         yield from bps.trigger_and_read([det])
+        yield from bps.close_run('success')
 
     return (yield from scan_closure())
 
