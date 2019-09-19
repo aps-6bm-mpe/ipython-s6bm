@@ -1,3 +1,7 @@
+# get all the symbols from the IPython shell
+import IPython
+globals().update(IPython.get_ipython().user_ns)
+
 print(f'Enter {__file__}...')
 # ----- Ipython control config and standard library import ----- #
 # NOTE:
